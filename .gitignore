@@ -1,0 +1,101 @@
+# Tout Doux — fichiers exclus du dépôt.
+#
+# Principe : on ignore ce qu'une commande sait reconstruire, jamais ce qui a été
+# écrit ou déposé à la main. Deux cas de ce projet méritent d'être explicites,
+# ils sont commentés plus bas : le dossier build/ et les bindings Wails.
+
+# ---------------------------------------------------------------------------
+# Backend Go
+# ---------------------------------------------------------------------------
+# Binaires de test produits par `go test -c`.
+*.test
+# Profils de couverture et de performance.
+*.out
+*.prof
+coverage.html
+# `go work` est propre à une machine et ne se partage pas.
+go.work
+go.work.sum
+
+# ---------------------------------------------------------------------------
+# Données locales de l'application (§3.3)
+# ---------------------------------------------------------------------------
+# En fonctionnement normal, app.db vit dans %APPDATA%\ToutDoux et n'est donc
+# jamais dans l'arborescence. Ces règles sont un garde-fou : une base ouverte
+# sur un chemin relatif pendant une mise au point contiendrait les données
+# réelles de l'utilisateur, qui n'ont rien à faire dans un dépôt.
+*.db
+*.db-wal
+*.db-shm
+/app-data/
+
+# ---------------------------------------------------------------------------
+# Frontend
+# ---------------------------------------------------------------------------
+node_modules/
+frontend/dist/
+# Empreinte que Wails calcule pour savoir si les dépendances ont bougé.
+frontend/package.json.md5
+# Caches de Vite et de TypeScript.
+.vite/
+*.tsbuildinfo
+
+# NOTE : frontend/wailsjs/ est généré par `wails generate module`, mais reste
+# suivi volontairement. `tsc` et les tests Vitest en dépendent, et l'ignorer
+# rendrait le dépôt inutilisable tant qu'on n'a pas lancé un build Go complet.
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+frontend/coverage/
+# Playwright : rapports et traces des exécutions.
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# ---------------------------------------------------------------------------
+# Build Wails
+# ---------------------------------------------------------------------------
+# Seul build/bin/ est ignoré, PAS build/ dans son ensemble.
+#
+# build/ mélange deux natures de fichiers, et le .gitignore généré par
+# `wails init` les confondait :
+#   - des SOURCES, à versionner — appicon.png (l'icône de l'application),
+#     windows/icon.ico, windows/info.json, windows/wails.exe.manifest,
+#     windows/installer/*.nsi et *.nsh, darwin/Info*.plist ;
+#   - des ARTEFACTS, à ignorer — le contenu de bin/.
+# Ignorer build/ entier ferait disparaître l'icône et la configuration de
+# l'installeur du dépôt, sans que rien ne le signale.
+build/bin/
+
+# Exécutables, y compris le binaire de développement suffixé par ~ que Wails
+# laisse derrière lui.
+*.exe
+*.exe~
+*.syso
+
+# ATTENTION : ne jamais ajouter une règle globale sur *.ico ni *.png.
+# assets/systray/*.ico est embarqué dans le binaire par go:embed, et
+# build/appicon.png est la source de l'icône : les exclure casserait la
+# compilation et la génération d'icône, de façon peu évidente à diagnostiquer.
+
+# ---------------------------------------------------------------------------
+# Éditeurs et systèmes
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------------
+# Secrets
+# ---------------------------------------------------------------------------
+# L'application est hors-ligne et n'a pas de configuration secrète aujourd'hui
+# (§6). La règle prévient le jour où quelqu'un en ajoutera une.
+.env
+.env.*
+!.env.example

@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* Couleurs des tâches (§2.2). Elles sont définies une seule fois ici et
+   réutilisées telles quelles par les projets (§2.1) et les filtres (§2.4) :
+   la v2 a supprimé les variantes "pastel" séparées de la v1. */
+@theme {
+  --color-critique: #ff4d4d;
+  --color-haute: #ffb84d;
+  --color-normale: #ffffff;
+  --color-basse: #d9d9d9;
+  --color-completee: #d7f5dd;
+  --color-annulee: #d9d9d9;
+  --color-selection: #166534;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* La fenêtre est native (§2.11) : pas de barre de titre HTML, et aucun
+     débordement horizontal du corps. */
+  overflow: hidden;
+}
