@@ -74,8 +74,19 @@
 - Icônes par type : tâche = **vraie case à cocher** (reflète l'état complété) **+ pastille colorée d'importance**, au lieu du simple symbole "✓" de la v1 ; note = 📝 ; réunion/instance = 📞
 - Simple clic = aperçu à droite ; double-clic (ou bouton "Ouvrir") = ferme la recherche et navigue vers l'élément dans son onglet natif (bascule automatiquement sur la vue Projets)
 
+**Recherche sémantique (nouveau — section 2.12)**
+- Second mode de recherche, **strictement séparé** de la recherche mot-clé : l'utilisateur choisit lequel il emploie, les deux ne sont jamais fusionnés
+- Bascule par une **icône 🧠 seule** dans la barre de recherche, décochée par défaut
+- **Opt-in par entité** : rien n'est vectorisé automatiquement. Un bouton « Ajouter à la recherche sémantique » sur les notes, les instances de réunion et les tâches
+- Une fois activée sur une entité, la vectorisation **se maintient seule** : chaque modification du texte la recalcule en arrière-plan, au rythme de la sauvegarde auto existante
+- **Zéro réseau, sans exception** : l'application ne télécharge rien et ne vérifie aucune mise à jour. Le modèle est déposé à la main par l'utilisateur
+
+**Préférences (nouveau — section 2.13)**
+- Nouvelle vue de premier niveau, icône ⚙️ : statut du modèle sémantique, chemin et noms de fichiers attendus, lien de téléchargement, bouton de vérification
+
 **Architecture (nouveau — section 3.9)**
 - Décision d'architecture hexagonale **appliquée avec discernement**, pas systématique : voir section 3.9 pour le détail de ce qui est mis derrière un port et ce qui ne l'est pas, et pourquoi
+- Un port `EmbeddingProvider` s'ajoute en même temps que la recherche sémantique (section 2.12), pour la raison habituelle : sans lui, tester le domaine imposerait de charger un modèle de 120 Mo à chaque `go test`
 
 ---
 
@@ -413,6 +424,10 @@ Objectif : aucune modification en cours ne doit pouvoir être perdue, quelle que
 **Barre de recherche**
 - Icône loupe + input + croix pour effacer (visible seulement si texte tapé)
 - Placeholder explicite du périmètre ("Rechercher dans les tâches, notes, réunions…")
+- **Bascule de mode** : icône 🧠 seule, à droite du champ, sans libellé — cohérent avec le reste de l'interface, où les filtres du §2.4 sont déjà en icônes. Décochée par défaut : la recherche mot-clé reste le mode normal
+  - Décochée → recherche mot-clé, décrite dans cette section
+  - Cochée → recherche sémantique, décrite en §2.12
+- Les deux modes ne sont **jamais fusionnés ni mélangés dans une même liste de résultats**. Ce sont deux façons différentes de chercher, avec des forces différentes ; les entrelacer produirait un classement que personne ne saurait interpréter
 
 **Déclenchement**
 - Typing > 2 caractères (à partir du 3ᵉ caractère)
@@ -500,26 +515,32 @@ Quitter
 ### 2.11 NAVIGATION GÉNÉRALE ET LAYOUT (nouvelle section)
 
 **Bande transverse unique**, juste sous le header, contenant :
-- À gauche : les deux vues de premier niveau, sous forme d'onglets — **Projets** (par défaut) et **Priorités**
-- À droite : la barre de recherche (2.9)
+- À gauche : les vues de premier niveau, sous forme d'onglets — **Projets** (par défaut) et **Priorités**
+- À droite : la barre de recherche (2.9), sa bascule sémantique 🧠 (2.12), puis l'accès aux **Préférences** ⚙️ (2.13)
 
 ```
-┌────────────────────────────────────────────────────┐
-│ [Icône + nom app]                    [Projet actif] │ ← Header (natif Wails, voir note)
-├────────────────────────────────────────────────────┤
-│ [Projets] [Priorités]      🔍 [Rechercher...] [X]  │ ← Bande transverse
-├──────────────────────────────────────────────────────┤
-│  contenu de la vue active (Projets, Priorités,       │
-│  ou résultats de recherche si une recherche est       │
-│  active)                                              │
-└────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│ [Icône + nom app]                          [Projet actif] │ ← Header (natif Wails, voir note)
+├──────────────────────────────────────────────────────────┤
+│ [Projets] [Priorités]   🔍 [Rechercher...] [X] [🧠] [⚙️] │ ← Bande transverse
+├──────────────────────────────────────────────────────────┤
+│  contenu de la vue active (Projets, Priorités,            │
+│  Préférences, ou résultats de recherche si une            │
+│  recherche est active)                                     │
+└──────────────────────────────────────────────────────────┘
 ```
+
+Les deux icônes de droite ne sont **pas de même nature**, et le schéma ne doit pas le laisser croire :
+- **🧠 est une bascule d'état** — elle modifie le comportement de la barre de recherche à côté de laquelle elle se trouve, et reste décochée par défaut
+- **⚙️ est une navigation** — elle ouvre la vue Préférences, au même titre que les onglets de gauche
 
 **Vue Projets** : sidebar projets (gauche, largeur redimensionnable) + sous-onglets Tâches/Notes/Réunions (droite)
 
 **Vue Priorités** : pleine largeur, pas de sidebar, split interne liste/détail (2.8)
 
-**Recherche active** : remplace tout le contenu, pleine largeur, quelle que soit la vue de premier niveau affichée avant la recherche
+**Vue Préférences** : pleine largeur, pas de sidebar, contenu statique (2.13)
+
+**Recherche active** : remplace tout le contenu, pleine largeur, quelle que soit la vue de premier niveau affichée avant la recherche — Projets, Priorités ou Préférences
 
 **Panneaux redimensionnables**
 Toutes les séparations entre deux zones de contenu sont redimensionnables au glisser-déposer, de façon cohérente dans toute l'app :
@@ -533,6 +554,89 @@ Toutes les séparations entre deux zones de contenu sont redimensionnables au gl
 **⚠️ Note importante pour le portage Wails**
 
 La barre de titre "Tout Doux" affichée en haut du prototype web (avec le nom de l'app) **ne doit pas être reprise telle quelle dans l'application Wails finale**. Elle sera remplacée par la barre de fenêtre native du système d'exploitation (icône de l'app déjà prête séparément). Cette barre HTML custom n'existe que parce que le prototype tourne dans un simple onglet de navigateur, sans fenêtre native autour.
+
+---
+
+### 2.12 RECHERCHE SÉMANTIQUE (nouvelle section)
+
+**Le problème résolu**
+
+La recherche mot-clé du §2.9, adossée à FTS5, rate deux situations fréquentes :
+
+1. **Une faute de frappe**, dans la requête ou dans le contenu indexé. « réuion » ne trouve rien.
+2. **Une reformulation** : les mêmes idées avec d'autres mots. Chercher « client mécontent » ne remonte pas une note qui dit « client en colère ».
+
+La recherche sémantique compare des **vecteurs de sens** plutôt que des chaînes de caractères. Elle ne remplace pas la recherche mot-clé, qui reste plus rapide et plus précise quand on sait exactement quel mot on cherche : les deux coexistent, l'utilisateur choisit.
+
+**Opt-in strict, entité par entité**
+
+Rien n'est vectorisé automatiquement. Calculer un vecteur coûte quelques centaines de millisecondes de CPU ; le faire sur tout le contenu sans qu'on l'ait demandé serait un coût imposé pour un bénéfice non désiré.
+
+- Un bouton **« Ajouter à la recherche sémantique »** est présent sur :
+  - les **notes** (§2.6) — titre et contenu
+  - les **instances de réunion** (§2.7) — notes de l'instance
+  - les **tâches** (§2.2) — nom et description
+- L'entité passe alors dans l'index sémantique, et le bouton reflète cet état
+
+**Maintien automatique après activation**
+
+Une fois une entité activée, l'utilisateur n'a plus rien à faire. Chaque modification de son **texte** déclenche une revectorisation silencieuse en arrière-plan, au même rythme que la sauvegarde automatique déjà en place (§2.6, §2.7) — délai d'inactivité, plus vidage immédiat au changement de sélection.
+
+> **Point de vigilance pour l'implémentation.** La revectorisation ne doit se déclencher que sur les champs **réellement textuels** : nom et description pour une tâche, titre et contenu pour une note, notes pour une instance. Les changements de **métadonnées** — importance, échéance, statut terminé ou annulé, ordre — ne modifient pas le sens du texte et ne doivent rien recalculer. Sans ce filtre, cocher une case déclencherait un calcul de plusieurs centaines de millisecondes pour un résultat identique. C'est un piège spécifique à cette fonctionnalité : dans le prototype React, recalculer un dérivé était gratuit ; ici, ça ne l'est pas.
+
+**Résultats**
+
+La vue résultats est celle du §2.9 — même liste à gauche, même aperçu à droite, mêmes icônes par type, même navigation au double-clic. Deux différences :
+
+- Le tri se fait par **similarité décroissante** et non par date : en recherche sémantique, la pertinence est un score, pas une chronologie
+- Il n'y a **pas de surbrillance** dans l'extrait : aucun mot exact n'a été mis en correspondance, il n'y a donc rien à surligner. L'extrait montre le début du contenu
+
+Seules les entités explicitement ajoutées à l'index sémantique peuvent remonter. Quand l'index est vide, la vue le dit clairement plutôt que d'afficher « aucun résultat », qui ferait croire à une absence de contenu correspondant.
+
+**Zéro réseau — contrainte non négociable**
+
+L'application n'accède jamais à Internet. Le poste de travail est derrière un proxy d'entreprise, et le §6 pose déjà l'application comme hors-ligne.
+
+Cela signifie, sans exception :
+
+- **Aucun téléchargement automatique** du modèle, ni au premier lancement, ni à la demande
+- **Aucune vérification de mise à jour**, du modèle comme du runtime
+- **Aucune télémétrie**
+
+**Le modèle est déposé par l'utilisateur**
+
+Le modèle n'est **ni embarqué dans l'installeur, ni téléchargé**. L'utilisateur le récupère lui-même et le dépose dans un dossier précis (§3.3).
+
+Si le modèle est absent au moment où on active la recherche sémantique, une fenêtre l'explique en donnant tout ce qu'il faut pour agir :
+
+- le **chemin exact** du dossier attendu
+- les **noms de fichiers exacts** attendus
+- le **lien de téléchargement**, à ouvrir depuis un poste qui a accès au réseau
+- un bouton **« Réessayer »** — jamais de tentative automatique
+
+**Limite connue et assumée**
+
+Si le modèle est absent au moment précis où une entité déjà vectorisée est modifiée, la mise à jour silencieuse échoue silencieusement : le vecteur reste celui de la version précédente du texte. Aucun indicateur ne le signale pour l'instant.
+
+C'est **documenté comme amélioration future possible, pas comme un point bloquant** à traiter maintenant. Le cas suppose que l'utilisateur retire le modèle après l'avoir installé, ce qui est rare, et la conséquence est un résultat de recherche légèrement périmé — pas une perte de données.
+
+---
+
+### 2.13 VUE PRÉFÉRENCES (nouvelle section)
+
+Troisième vue de premier niveau, accessible par une **icône ⚙️** dans la bande transverse (§2.11), à droite de la barre de recherche.
+
+**Contenu**
+
+- **Statut du modèle sémantique** : présent ou absent, avec le détail fichier par fichier
+- **Chemin attendu** du dossier, affiché en toutes lettres et copiable
+- **Noms de fichiers attendus**, listés explicitement
+- **Lien de téléchargement** du modèle
+- **Bouton de vérification** : relance la détection et met le statut à jour
+
+**Pourquoi une vue et pas seulement une fenêtre**
+
+La fenêtre du §2.12 ne s'affiche qu'au moment où l'utilisateur active la recherche sémantique sans modèle. Elle disparaît ensuite. Cette vue sert de **référence permanente** : on doit pouvoir y revenir des semaines plus tard pour retrouver le chemin ou le lien, sans avoir à reproduire la condition d'erreur.
 
 ---
 
@@ -557,18 +661,21 @@ La barre de titre "Tout Doux" affichée en haut du prototype web (avec le nom de
 │  BACKEND (Go + Wails)           │
 │  ├─ app/          (adaptateur pilote, méthodes exposées au frontend)
 │  ├─ domain/       (cœur métier, pur)
-│  ├─ ports/        (interfaces Repository, Clock)
-│  ├─ adapters/     (SQLite, FTS5 — adaptateurs pilotés)
+│  ├─ ports/        (interfaces Repository, Clock, SearchIndex, EmbeddingProvider)
+│  ├─ adapters/     (SQLite, FTS5, ONNX — adaptateurs pilotés)
 │  └─ errors.go                  │
-└────────────────┬────────────────┘
-                 │ SQL
-                 ↓
-        ┌────────────────┐
-        │  SQLite (DB)   │
-        │  /app-data/    │
-        │  app.db        │
-        └────────────────┘
+└──────┬──────────────────┬───────┘
+       │ SQL              │ inférence locale (2.12)
+       ↓                  ↓
+┌────────────────┐  ┌──────────────────────┐
+│  SQLite (DB)   │  │ onnxruntime.dll      │ ← livrée avec l'app
+│  /app-data/    │  │ + modèle ONNX        │ ← déposé par l'utilisateur
+│  app.db        │  │ /app-data/models/    │
+└────────────────┘  └──────────────────────┘
 ```
+
+Les deux dépendances de droite sont **locales**, jamais distantes : aucune flèche ne sort
+de ce schéma vers l'extérieur, et c'est une contrainte, pas un oubli (§6).
 
 ---
 
@@ -663,7 +770,31 @@ CREATE VIRTUAL TABLE search_index USING fts5(
     entity_id,
     created_at
 );
+
+-- Index sémantique (2.12). Table ordinaire, pas une table virtuelle : la
+-- similarité se calcule en Go à la lecture, il n'y a rien à indexer côté SQLite.
+CREATE TABLE embeddings (
+    entity_id   TEXT PRIMARY KEY,   -- une entité, un vecteur
+    type        TEXT NOT NULL,      -- 'note' | 'meeting' | 'task'
+    project_id  TEXT NOT NULL,
+    vector      BLOB NOT NULL,      -- float32 sérialisés
+    dimensions  INTEGER NOT NULL,   -- garde-fou : refuser de comparer deux
+                                    -- vecteurs de tailles différentes, ce qui
+                                    -- arriverait si le modèle changeait
+    source_hash TEXT NOT NULL,      -- empreinte du texte vectorisé, pour ne pas
+                                    -- recalculer un vecteur inchangé
+    updated_at  DATETIME,
+    FOREIGN KEY(project_id) REFERENCES projects(id)
+);
+
+CREATE INDEX idx_embeddings_project ON embeddings(project_id);
 ```
+
+**Pourquoi pas d'extension vectorielle**
+
+`sqlite-vec` et consorts apportent une recherche vectorielle approchée, utile à partir de centaines de milliers de vecteurs. Une application personnelle en compte quelques milliers au plus : un balayage complet avec similarité cosinus calculée en Go pur reste sous la milliseconde, et évite d'ajouter une extension native à charger — ce qui irait à l'encontre du choix « sans CGO » du §3.5.
+
+`source_hash` mérite un mot : c'est ce qui évite de revectoriser un texte qu'on vient de réenregistrer sans l'avoir modifié. Combiné au filtrage sur les champs textuels (§2.12), il supprime l'essentiel des calculs inutiles.
 
 ---
 
@@ -674,11 +805,23 @@ CREATE VIRTUAL TABLE search_index USING fts5(
 ```
 /app-data/
 ├─ app.db
-└─ images/
-   ├─ note-uuid-1.png
-   ├─ meeting-uuid-3.png
-   └─ task-uuid-4.webp
+├─ images/
+│  ├─ note-uuid-1.png
+│  ├─ meeting-uuid-3.png
+│  └─ task-uuid-4.webp
+└─ models/                        ← déposé par l'utilisateur (2.12)
+   ├─ model.onnx
+   ├─ tokenizer.json
+   └─ sentencepiece.bpe.model
 ```
+
+**Dossier du modèle sémantique (2.12)**
+
+Les trois fichiers sont attendus sous ce nom exact, dans `/app-data/models/`. Le dossier est celui des données utilisateur — pas celui de l'exécutable, qui peut être installé dans un emplacement non inscriptible.
+
+L'application **ne crée pas** ces fichiers et ne les télécharge jamais. Elle se contente de vérifier leur présence et d'afficher le chemin attendu quand ils manquent (§2.13).
+
+`onnxruntime.dll` fait exception et n'est **pas** dans ce dossier : c'est une bibliothèque d'exécution, livrée avec l'application, à côté de l'exécutable (§3.5).
 
 **Stratégie images**
 - Image < 50KB → BLOB en base64 dans le contenu
@@ -717,6 +860,22 @@ Même philosophie que Tauri : webview système (pas de Chromium embarqué comme 
 **Desktop** : WebKit2GTK (Linux) / WebView2 (Windows) / WKWebView (macOS) — identique à Tauri, c'est la même famille d'approche "webview système". Bundler Wails (`wails build`) pour générer l'exécutable.
 
 **Diagnostic d'environnement** : `wails doctor` vérifie automatiquement la présence du compilateur C et du runtime WebView2 avant de lancer un build — déjà validé sur cette machine.
+
+**Recherche sémantique (2.12)**
+
+| Élément | Choix | Taille | Distribution |
+|---|---|---|---|
+| Modèle | `intfloat/multilingual-e5-small`, export ONNX, **quantifié int8** | ~120 Mo | **déposé par l'utilisateur**, jamais dans l'installeur |
+| Runtime | `onnxruntime.dll` | ~15-20 Mo | **inclus dans l'installeur** |
+| Liaison Go | `github.com/yalue/onnxruntime_go` | — | dépendance Go |
+
+Trois décisions, et leurs raisons :
+
+**Le modèle est multilingue et quantifié.** `multilingual-e5-small` couvre le français, ce qu'un modèle anglophone ne ferait pas sur ce corpus. La version int8 pèse ~120 Mo contre ~470 Mo en fp32, pour une perte de qualité marginale sur de la recherche de similarité — le rapport est sans comparaison à cette échelle.
+
+**Le modèle n'est pas dans l'installeur, le runtime si.** La distinction est volontaire et tient à la nature des deux : `onnxruntime.dll` est une bibliothèque d'exécution, du même ordre que le runtime WebView2, et l'inclure ne pose pas plus de question que de livrer n'importe quelle dépendance. Le modèle, lui, est une donnée de 120 Mo qui quadruplerait le poids de l'installeur pour une fonctionnalité optionnelle que tous les utilisateurs n'activeront pas.
+
+**`yalue/onnxruntime_go` charge la DLL dynamiquement**, à l'exécution, et n'impose donc **pas de CGO à la compilation**. C'est ce qui permet à cette fonctionnalité de ne pas remettre en cause la chaîne de build sans compilateur C établie plus haut — c'était une condition d'acceptation, pas un heureux hasard. Concrètement, il y a un fichier de plus à côté de l'exécutable, et rien ne change au `wails build`.
 
 ---
 
@@ -766,6 +925,16 @@ Même philosophie que Tauri : webview système (pas de Chromium embarqué comme 
 - `upload_image(project_id, image_data, format)` → `image_url`
 - `get_image(image_id)` → `image_data`
 
+**Recherche sémantique (2.12)**
+- `search_semantic(query)` → `[]SearchResult` — triés par similarité décroissante, jamais mélangés aux résultats mot-clé
+- `add_to_semantic_index(entity_type, entity_id)` → vectorise et enregistre ; c'est l'action du bouton « Ajouter à la recherche sémantique »
+- `remove_from_semantic_index(entity_id)`
+- `is_in_semantic_index(entity_id)` → `bool` — alimente l'état du bouton
+- `refresh_embedding(entity_id)` — revectorisation silencieuse après modification du texte. Sans effet si l'entité n'est pas dans l'index, et sans effet si `source_hash` est inchangé
+
+**Modèle sémantique (2.13)**
+- `get_model_status()` → `{ Available: bool, Directory: string, ExpectedFiles: []string, MissingFiles: []string, DownloadURL: string }` — une seule commande alimente à la fois la fenêtre du §2.12 et la vue Préférences du §2.13, pour que les deux ne puissent pas diverger
+
 **Settings**
 - `get_setting(key)` → `value`
 - `set_setting(key, value)`
@@ -788,6 +957,19 @@ Même philosophie que Tauri : webview système (pas de Chromium embarqué comme 
 
 - Startup < 500ms, recherche globale < 100ms (10k docs), rendu arbre < 100ms (500 tâches), mémoire < 100MB
 - FTS5, requêtes ciblées, virtualisation si besoin, debounce 300ms, lazy-load images > 50KB
+
+**Recherche sémantique (2.12) — objectifs distincts**
+
+Cette fonctionnalité ne tient pas les chiffres ci-dessus, et ce n'est pas une régression : les ordres de grandeur d'une inférence de modèle n'ont rien à voir avec ceux d'une requête SQL.
+
+| Opération | Ordre de grandeur | Remarque |
+|---|---|---|
+| Chargement du modèle | quelques secondes | une fois, au premier usage — **jamais au démarrage de l'app**, sinon le budget des 500 ms saute |
+| Vectorisation d'un texte | quelques centaines de ms | c'est ce qui justifie l'opt-in et le filtrage sur les champs textuels (§2.12) |
+| Recherche sur l'index | < 10 ms | une vectorisation de la requête, puis un balayage de quelques milliers de vecteurs |
+| Mémoire, modèle chargé | +150 à 250 Mo | dépasse le budget des 100 Mo, assumé : c'est le prix d'une fonctionnalité optionnelle, et l'app y revient dès qu'elle est inutilisée |
+
+Deux conséquences à respecter : le modèle est chargé **paresseusement**, à la première utilisation réelle et pas au lancement ; et la vectorisation se fait **hors du fil de l'interface**, sinon la frappe se figerait pendant le calcul.
 
 ---
 
@@ -819,6 +1001,9 @@ Les fonctions suivantes, déjà isolées et testées comme fonctions pures dans 
 | `TaskRepository`, `ProjectRepository`, `NoteRepository`, `MeetingRepository` | SQLite est amené à évoluer (format, sync) ; tests du domaine sans vraie base | `SqliteXxxRepository` (réel) ; `InMemoryXxxRepository` (tests unitaires domaine) |
 | `SearchIndex` | Le moteur d'indexation pourrait changer ; tests de matching/surbrillance sans FTS5 réel | `Fts5SearchAdapter` |
 | `Clock` (`Now() time.Time`) | Les règles d'échéance sont sensibles au temps (urgence < 5min, vendredi → lundi) ; sans ce port, les tester proprement est pénible | `SystemClock` (réel, `time.Now()`) ; horloge figée pour les tests |
+| `EmbeddingProvider` (`Embed(text) ([]float32, error)`) | Sans ce port, tester la moindre règle touchant à la recherche sémantique imposerait de charger un modèle de 120 Mo à **chaque** `go test` — la suite passerait de moins d'une seconde à plusieurs dizaines. C'est exactement le second critère : un besoin de test réel, autrement pénible | `OnnxEmbeddingProvider` (réel) ; `FakeEmbeddingProvider` (vecteur déterministe, tests) |
+
+Le `FakeEmbeddingProvider` rend un vecteur **déterministe dérivé du texte** : deux textes identiques donnent le même vecteur, deux textes différents des vecteurs différents. C'est suffisant pour tester tout ce qui entoure le modèle — l'opt-in, la revectorisation sur changement de texte, le non-recalcul sur changement de métadonnée, le tri par similarité, la séparation des deux modes de recherche. Ce qu'il ne teste pas, et ne prétend pas tester, c'est la **qualité sémantique** du vrai modèle : que « client en colère » soit proche de « client mécontent » relève du modèle, pas de notre code.
 
 **Explicitement PAS mis derrière un port**
 
@@ -840,6 +1025,14 @@ La pyramide de test décrite dans `STRATEGIE_QA_TESTING.md` reste valable. Cette
 2. **Tests d'intégration repository (Go)** — contre une **vraie SQLite en mémoire** (`:memory:`), pas de mock ni de port simulé. Objectif : vérifier qu'ajouter puis relire une donnée renvoie bien la même chose (round-trip), **pas** que SQLite fonctionne. Aucun port n'est nécessaire pour ce niveau : on instancie directement l'adaptateur réel.
 3. **Tests de composants (React Testing Library)** — les données sont passées en **props depuis des fixtures JSON**, jamais lues depuis un vrai backend. Déjà permis par l'architecture du prototype : aucun composant (`TaskNode`, `DetailPanel`, `NotesTab`...) n'appelle un binding Wails ou le stockage directement — seul le composant racine le fait. Ce découplage suffit, sans introduire de port frontend dédié.
 4. **Tests E2E (Playwright)** — contre l'app Wails complète, incluant la régression visuelle de layout (captures d'écran comparées à une référence).
+
+**Recherche sémantique (2.12)**
+
+Toute la suite tourne contre `FakeEmbeddingProvider`, jamais contre le vrai modèle. Charger 120 Mo à chaque `go test` ferait passer la suite de moins d'une seconde à plusieurs dizaines, et rendrait les tests impossibles à exécuter sur une machine où le modèle n'est pas déposé — c'est-à-dire toute machine d'intégration continue, puisque le modèle n'est ni dans le dépôt ni téléchargeable.
+
+Ce qui se teste ainsi : l'opt-in par entité, la revectorisation déclenchée par un changement de texte, l'**absence** de revectorisation sur un changement de métadonnée, le rôle de `source_hash`, le tri par similarité, la séparation stricte des deux modes de recherche, et le comportement quand le modèle est absent.
+
+Ce qui ne se teste pas automatiquement, et doit être vérifié à la main une fois le modèle en place : la **qualité sémantique** des résultats. Que « client en colère » ressorte sur « client mécontent » dépend du modèle, pas de notre code — un test qui l'affirmerait ne testerait que le `Fake`.
 
 ---
 
@@ -879,6 +1072,32 @@ La pyramide de test décrite dans `STRATEGIE_QA_TESTING.md` reste valable. Cette
 6. Double-clic (ou "Ouvrir") → ferme la recherche, bascule sur la vue Projets,
    sélectionne le bon projet/onglet/élément
 7. Échap ou "Fermer" → revient à la vue affichée avant la recherche
+```
+
+### Chercher "client mécontent" en mode sémantique (2.12)
+```
+1. User a coché 🧠 dans la bande transverse
+2. > 2 caractères → debounce 300ms → search_semantic("client mécontent")
+3. Backend : charge le modèle si ce n'est pas déjà fait (paresseux, quelques
+   secondes la première fois), puis vectorise la requête
+4. Backend : SELECT entity_id, vector FROM embeddings ; similarité cosinus
+   calculée en Go pour chaque vecteur ; tri par score décroissant
+5. Frontend affiche la même vue résultats qu'en 2.9, mais SANS surbrillance —
+   aucun mot exact n'a été mis en correspondance, il n'y a rien à surligner
+6. Une note disant "client en colère" remonte, là où le mode mot-clé ne
+   trouvait rien
+```
+
+### Ajouter une note à l'index sémantique, puis la modifier
+```
+1. User clique "Ajouter à la recherche sémantique" sur une note
+2. add_to_semantic_index("note", id) → vectorise → INSERT INTO embeddings
+   (avec source_hash = empreinte du texte vectorisé)
+3. Plus tard, user modifie le CONTENU de la note
+4. La sauvegarde auto écrit la note (2.6), puis appelle refresh_embedding(id)
+5. Backend : l'entité est dans l'index ET source_hash a changé → revectorise
+6. En revanche, si user change seulement l'importance d'une tâche indexée :
+   aucun champ textuel touché → AUCUN appel, aucun calcul (2.12)
 ```
 
 ---
@@ -928,6 +1147,18 @@ La pyramide de test décrite dans `STRATEGIE_QA_TESTING.md` reste valable. Cette
 - **Compatibilité** : Windows 10+, macOS 11+, Linux — 4GB RAM / 100MB disque minimum
 - **Support** : français uniquement, pas de sync cloud, pas de collaboration multi-utilisateur
 
+**Précision v2 — « hors-ligne » au sens strict (2.12)**
+
+L'arrivée de la recherche sémantique durcit ce point, qui restait implicite tant qu'aucune fonctionnalité n'avait de raison d'accéder au réseau. Le poste de travail est derrière un proxy d'entreprise, et l'application ne doit **jamais** émettre de requête sortante :
+
+- pas de téléchargement de modèle, même à la demande explicite de l'utilisateur
+- pas de vérification de mise à jour, ni du modèle ni du runtime
+- pas de télémétrie, pas de rapport d'erreur distant
+
+Toute dépendance externe est donc **déposée à la main** (le modèle, §3.3) ou **livrée avec l'application** (`onnxruntime.dll`, §3.5). L'interface se limite à indiquer où trouver ce qui manque ; c'est à l'utilisateur d'aller le chercher depuis un poste qui a accès au réseau.
+
+**Empreinte mémoire.** Le budget de 100 Mo ci-dessus vaut pour l'application seule. Modèle sémantique chargé, elle monte à 250-350 Mo (§3.8). C'est assumé pour une fonctionnalité optionnelle, activée entité par entité.
+
 ---
 
 ## 7. PHASES DE DÉVELOPPEMENT (mise à jour v2)
@@ -963,9 +1194,25 @@ La pyramide de test décrite dans `STRATEGIE_QA_TESTING.md` reste valable. Cette
 - [ ] Tests (3.10) : domaine, repository (SQLite en mémoire), composants (fixtures), E2E
 - [ ] Styling final
 
-### Phase 5 : Release
-- [ ] Build installers
-- [ ] Documentation utilisateur
+### Phase 5 : Recherche sémantique (2.12, 2.13)
+Placée après le Polish et non dans la Phase 3 avec la recherche mot-clé : elle en est
+indépendante — les deux modes ne partagent ni index, ni stockage, ni chemin de code —
+et elle est optionnelle par nature. La livrer plus tôt retarderait une application
+complète pour une fonctionnalité qu'on peut ajouter sans rien casser.
+
+- [ ] Port `EmbeddingProvider` + `FakeEmbeddingProvider` (3.9), **avec ses tests d'abord**
+- [ ] Table `embeddings` (3.2) et similarité cosinus en Go pur
+- [ ] Adaptateur `OnnxEmbeddingProvider` : chargement paresseux, `yalue/onnxruntime_go`
+- [ ] Détection du modèle et `get_model_status` (3.6)
+- [ ] Bouton « Ajouter à la recherche sémantique » sur notes, instances et tâches
+- [ ] Revectorisation silencieuse, **filtrée sur les champs textuels uniquement** (2.12)
+- [ ] Bascule 🧠 dans la barre et vue résultats en mode sémantique (2.9, 2.12)
+- [ ] Vue Préférences ⚙️ (2.13)
+- [ ] Vérification manuelle de la qualité sémantique, modèle réel en place (3.10)
+
+### Phase 6 : Release
+- [ ] Build installers — **avec `onnxruntime.dll`, sans le modèle** (3.5)
+- [ ] Documentation utilisateur — dont la procédure de dépôt du modèle
 - [ ] Release notes
 - [ ] Release publique
 
