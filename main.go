@@ -25,19 +25,15 @@ func main() {
 		MinWidth:  900,
 		MinHeight: 600,
 
-		// §2.10 demande que le X cache la fenêtre au lieu de quitter, l'app
-		// continuant en arrière-plan. Le drapeau existe et fonctionne :
+		// Le X cache la fenêtre au lieu de quitter : l'application continue en
+		// arrière-plan (§2.10).
 		//
-		//     HideWindowOnClose: true,
-		//
-		// mais il reste désactivé jusqu'à la Phase 4, parce qu'il n'a de sens
-		// qu'avec la seconde moitié du §2.10 : l'icône de barre système et son
-		// entrée « Quitter ». Sans elle, cacher la fenêtre laisse un processus
-		// vivant, invisible et impossible à arrêter autrement qu'en le tuant —
-		// et `wails dev` ne rend jamais la main.
-		//
-		// À réactiver dans le même temps que le systray, jamais avant.
-		HideWindowOnClose: false,
+		// Ce drapeau est indissociable de l'entrée « Quitter » du menu de la
+		// barre système, qui est la seule sortie de l'application. Si le tray
+		// venait à être retiré, celui-ci devrait repasser à false dans le même
+		// mouvement — sinon la fenêtre se ferme sur un processus invisible et
+		// impossible à arrêter, et `wails dev` ne rend jamais la main.
+		HideWindowOnClose: true,
 
 		AssetServer:      &assetserver.Options{Assets: assets},
 		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 1},

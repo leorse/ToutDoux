@@ -39,6 +39,22 @@ export function resetBackend(): void {
 }
 
 /**
+ * S'abonne à un événement émis par le backend (§2.10).
+ *
+ * Comme les bindings, `window.runtime` n'existe que dans la WebView Wails.
+ * Hors de là — navigateur, jsdom — la fonction ne fait rien et rend un
+ * désabonnement inerte, plutôt que de faire planter le composant qui s'abonne.
+ */
+export function onEvent(nom: string, handler: (payload: never) => void): () => void {
+  const runtime = (window as unknown as { runtime?: Record<string, unknown> }).runtime
+  const abonner = runtime?.EventsOn as
+    | ((n: string, h: (p: never) => void) => () => void)
+    | undefined
+  if (typeof abonner !== 'function') return () => {}
+  return abonner(nom, handler)
+}
+
+/**
  * Point d'accès unique au backend.
  *
  * Les composants passent par ici et n'importent jamais `wailsjs` directement.

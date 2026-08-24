@@ -478,7 +478,20 @@ Objectif : aucune modification en cours ne doit pouvoir être perdue, quelle que
 - Normal : icône standard app
 - Haute urgence : icône "haute priorité" (orange)
 - Urgence critique : icône "critique" (rouge)
-- Clignotement si tâche < 5min
+
+**Clignotement — précision v2**
+
+Quand une tâche porte l'icône ⏰ — **échéance imminente (< 5 min) ou dépassée**, exactement la condition du §2.3 — l'icône de la barre système **alterne entre une icône d'horloge et l'icône du niveau courant** :
+
+- niveau normal → alternance **horloge ↔ normale**
+- niveau haut → alternance **horloge ↔ haute**
+- niveau critique → alternance **horloge ↔ critique**
+
+Le clignotement vaut donc **à tous les niveaux, y compris normal** : l'horloge parle du temps, le niveau parle de l'importance, et les deux dimensions sont indépendantes. Une tâche en retard mérite d'être signalée même si aucune tâche n'est critique.
+
+Il n'y a **pas d'icône vide** : l'alternance se fait toujours entre deux icônes visibles, ce qui évite l'effet de disparition de l'application dans la barre. Le fichier `blank.ico` n'est pas utilisé.
+
+**Notification ≠ clignotement.** La notification (plus bas) reste réservée au franchissement des 5 minutes. Signaler à chaque démarrage une tâche en retard depuis trois jours serait du bruit ; la faire clignoter, non — c'est un rappel passif, pas une interruption.
 
 **Menu contextuel (clic droit)**
 ```
@@ -605,7 +618,7 @@ Cela signifie, sans exception :
 
 **Le modèle est déposé par l'utilisateur**
 
-Le modèle n'est **ni embarqué dans l'installeur, ni téléchargé**. L'utilisateur le récupère lui-même et le dépose dans un dossier précis (§3.3).
+Le modèle n'est **ni distribué avec l'application, ni téléchargé**. L'utilisateur le récupère lui-même et le dépose dans un dossier précis (§3.3).
 
 Si le modèle est absent au moment où on active la recherche sémantique, une fenêtre l'explique en donnant tout ce qu'il faut pour agir :
 
@@ -865,15 +878,17 @@ Même philosophie que Tauri : webview système (pas de Chromium embarqué comme 
 
 | Élément | Choix | Taille | Distribution |
 |---|---|---|---|
-| Modèle | `intfloat/multilingual-e5-small`, export ONNX, **quantifié int8** | ~120 Mo | **déposé par l'utilisateur**, jamais dans l'installeur |
-| Runtime | `onnxruntime.dll` | ~15-20 Mo | **inclus dans l'installeur** |
+| Modèle | `intfloat/multilingual-e5-small`, export ONNX, **quantifié int8** | ~120 Mo | **déposé par l'utilisateur**, jamais dans le paquet |
+| Runtime | `onnxruntime.dll` | ~15-20 Mo | **livré avec l'application** |
 | Liaison Go | `github.com/yalue/onnxruntime_go` | — | dépendance Go |
 
 Trois décisions, et leurs raisons :
 
 **Le modèle est multilingue et quantifié.** `multilingual-e5-small` couvre le français, ce qu'un modèle anglophone ne ferait pas sur ce corpus. La version int8 pèse ~120 Mo contre ~470 Mo en fp32, pour une perte de qualité marginale sur de la recherche de similarité — le rapport est sans comparaison à cette échelle.
 
-**Le modèle n'est pas dans l'installeur, le runtime si.** La distinction est volontaire et tient à la nature des deux : `onnxruntime.dll` est une bibliothèque d'exécution, du même ordre que le runtime WebView2, et l'inclure ne pose pas plus de question que de livrer n'importe quelle dépendance. Le modèle, lui, est une donnée de 120 Mo qui quadruplerait le poids de l'installeur pour une fonctionnalité optionnelle que tous les utilisateurs n'activeront pas.
+**Le modèle n'est pas dans le paquet, le runtime si.** La distinction est volontaire et tient à la nature des deux : `onnxruntime.dll` est une bibliothèque d'exécution, du même ordre que le runtime WebView2, et la livrer à côté de l'exécutable ne pose pas plus de question que n'importe quelle dépendance. Le modèle, lui, est une donnée de 120 Mo qui quadruplerait le poids de la distribution pour une fonctionnalité optionnelle que tous les utilisateurs n'activeront pas.
+
+L'application est distribuée **en portable, sans installeur** (§7, Phase 6) : une archive à décompresser, `toutdoux.exe` et `onnxruntime.dll` côte à côte.
 
 **`yalue/onnxruntime_go` charge la DLL dynamiquement**, à l'exécution, et n'impose donc **pas de CGO à la compilation**. C'est ce qui permet à cette fonctionnalité de ne pas remettre en cause la chaîne de build sans compilateur C établie plus haut — c'était une condition d'acceptation, pas un heureux hasard. Concrètement, il y a un fichier de plus à côté de l'exécutable, et rien ne change au `wails build`.
 
@@ -955,7 +970,8 @@ Trois décisions, et leurs raisons :
 
 *(Inchangée depuis la v1)*
 
-- Startup < 500ms, recherche globale < 100ms (10k docs), rendu arbre < 100ms (500 tâches), mémoire < 100MB
+- Startup < 500ms, recherche globale < 100ms (10k docs), rendu arbre < 100ms (500 tâches)
+- Mémoire < 100 Mo **sans** recherche sémantique ; plafond porté à 350 Mo modèle chargé, accepté explicitement (§6)
 - FTS5, requêtes ciblées, virtualisation si besoin, debounce 300ms, lazy-load images > 50KB
 
 **Recherche sémantique (2.12) — objectifs distincts**
@@ -967,7 +983,7 @@ Cette fonctionnalité ne tient pas les chiffres ci-dessus, et ce n'est pas une r
 | Chargement du modèle | quelques secondes | une fois, au premier usage — **jamais au démarrage de l'app**, sinon le budget des 500 ms saute |
 | Vectorisation d'un texte | quelques centaines de ms | c'est ce qui justifie l'opt-in et le filtrage sur les champs textuels (§2.12) |
 | Recherche sur l'index | < 10 ms | une vectorisation de la requête, puis un balayage de quelques milliers de vecteurs |
-| Mémoire, modèle chargé | +150 à 250 Mo | dépasse le budget des 100 Mo, assumé : c'est le prix d'une fonctionnalité optionnelle, et l'app y revient dès qu'elle est inutilisée |
+| Mémoire, modèle chargé | 250 à 350 Mo au total | **plafond révisé et accepté** — voir ci-dessous |
 
 Deux conséquences à respecter : le modèle est chargé **paresseusement**, à la première utilisation réelle et pas au lancement ; et la vectorisation se fait **hors du fil de l'interface**, sinon la frappe se figerait pendant le calcul.
 
@@ -1024,7 +1040,17 @@ La pyramide de test décrite dans `STRATEGIE_QA_TESTING.md` reste valable. Cette
 1. **Tests domaine (Go)** — contre des fonctions pures uniquement, zéro infrastructure (`go test` standard). Exemple : la cascade de réactivation des parents, les calculs d'échéance.
 2. **Tests d'intégration repository (Go)** — contre une **vraie SQLite en mémoire** (`:memory:`), pas de mock ni de port simulé. Objectif : vérifier qu'ajouter puis relire une donnée renvoie bien la même chose (round-trip), **pas** que SQLite fonctionne. Aucun port n'est nécessaire pour ce niveau : on instancie directement l'adaptateur réel.
 3. **Tests de composants (React Testing Library)** — les données sont passées en **props depuis des fixtures JSON**, jamais lues depuis un vrai backend. Déjà permis par l'architecture du prototype : aucun composant (`TaskNode`, `DetailPanel`, `NotesTab`...) n'appelle un binding Wails ou le stockage directement — seul le composant racine le fait. Ce découplage suffit, sans introduire de port frontend dédié.
-4. **Tests E2E (Playwright)** — contre l'app Wails complète, incluant la régression visuelle de layout (captures d'écran comparées à une référence).
+4. **Vérification visuelle (navigateur)** — l'interface est servie par `wails dev`, ouverte dans un navigateur pilotable, et une capture est prise puis relue avant de déclarer une tâche visuelle terminée.
+
+**Sur l'E2E automatisé — décision : abandonné**
+
+La v2 de cette section prévoyait du Playwright contre l'application Wails complète. **Ce niveau est retiré**, pour une raison de fait : Wails v2 n'expose aucun pilote WebDriver, et Playwright ne sait pas piloter WebView2. La promesse était irréalisable, pas seulement coûteuse.
+
+Ce qui la remplace, et qui suffit :
+- le **contrat de disposition** vérifié en Vitest sur le DOM (niveau 3) attrape les régressions d'agencement, qui étaient la raison d'être de la régression visuelle ;
+- la **vérification par capture** ci-dessus attrape ce qu'aucun test ne voit — un panneau vide, un contraste illisible, un bouton hors écran.
+
+Playwright reste installé, mais comme **outil de capture** pendant le développement, pas comme niveau de test dans la pyramide. Nuance importante : rien dans la suite ne dépend de lui, et `npm test` n'en a pas besoin.
 
 **Recherche sémantique (2.12)**
 
@@ -1157,76 +1183,167 @@ L'arrivée de la recherche sémantique durcit ce point, qui restait implicite ta
 
 Toute dépendance externe est donc **déposée à la main** (le modèle, §3.3) ou **livrée avec l'application** (`onnxruntime.dll`, §3.5). L'interface se limite à indiquer où trouver ce qui manque ; c'est à l'utilisateur d'aller le chercher depuis un poste qui a accès au réseau.
 
-**Empreinte mémoire.** Le budget de 100 Mo ci-dessus vaut pour l'application seule. Modèle sémantique chargé, elle monte à 250-350 Mo (§3.8). C'est assumé pour une fonctionnalité optionnelle, activée entité par entité.
+**Empreinte mémoire — plafond révisé.** Le budget de 100 Mo hérité de la v1 vaut pour l'application sans recherche sémantique. Modèle chargé, elle monte à **350 Mo, et c'est explicitement accepté** (décision produit, pas un dépassement toléré) : le poste cible dispose de la mémoire nécessaire, et l'alternative — renoncer à la recherche sémantique — coûte plus cher que les 250 Mo supplémentaires.
+
+Cela ne dispense pas du chargement paresseux du §3.8 : une application qui monterait à 350 Mo **au démarrage**, y compris pour un utilisateur qui n'active jamais la fonctionnalité, serait un autre sujet.
 
 ---
 
 ## 7. PHASES DE DÉVELOPPEMENT (mise à jour v2)
+
+Chaque phase se termine sur un état livrable : l'application compile, la suite de
+tests passe, et l'écran a été regardé. Les étapes à l'intérieur d'une phase sont
+ordonnées par dépendance, pas par confort — l'ordre indiqué est celui qui évite
+de construire au-dessus du vide.
 
 ### Phase 0 : Prototypage — ✅ terminée
 - [x] Prototype React complet (Projets, Tâches, Notes, Réunions, Priorités, Recherche)
 - [x] Validation UX et layout avec panneaux redimensionnables
 - [x] Logique métier isolée en fonctions pures, prête à être portée
 
-### Phase 1 : Fondations
-- [ ] Init projet Wails + React
-- [ ] Schéma SQLite (3.2)
-- [ ] Domaine Go : port des fonctions pures identifiées en 3.9
-- [ ] Ports/traits Repository + adaptateurs SQLite
-- [ ] CRUD basique (projets, tâches, notes)
-- [ ] UI layout principal (2.11), fenêtre native (sans la barre custom du prototype)
+### Phase 1 : Fondations — ✅ terminée
+- [x] Init projet Wails + React
+- [x] Schéma SQLite (3.2) avec migrations versionnées
+- [x] Domaine Go : `duedate`, `tasktree`, `cascade`, `stats`, `search` (3.9)
+- [x] Ports `Clock` + 3 Repository, adaptateurs SQLite et horloge figée
+- [x] CRUD projets / tâches / notes (3.6)
+- [x] Layout principal (2.11), fenêtre native sans barre HTML custom
 
-### Phase 2 : Core
-- [ ] Hiérarchie tâches + drag-drop + cascade de réactivation (2.2)
-- [ ] Filtres icônes/pastilles (2.4)
-- [ ] Éditeur TipTap
-- [ ] Sauvegarde auto avec flush immédiat (2.6/2.7)
+### Phase 2 : Core — ✅ terminée
+- [x] Hiérarchie, drag & drop, cascade de réactivation (2.2)
+- [x] Filtres icônes/pastilles, persistants entre projets (2.4)
+- [x] Éditeur TipTap avec barre d'outils
+- [x] Sauvegarde auto avec vidage immédiat (2.6)
 
-### Phase 3 : Vues transverses + Search
-- [ ] Vue Priorités en tant que vue de premier niveau, split liste/détail (2.8)
-- [ ] Gestion réunions (par projet)
-- [ ] Index FTS5 + `search_global`
-- [ ] Barre recherche fusionnée + vue résultats (2.9)
-
-### Phase 4 : Polish
-- [ ] Taskbar integration (2.10), réutilisant `get_priority_tasks`
-- [ ] Notifications urgence
-- [ ] Tests (3.10) : domaine, repository (SQLite en mémoire), composants (fixtures), E2E
-- [ ] Styling final
-
-### Phase 5 : Recherche sémantique (2.12, 2.13)
-Placée après le Polish et non dans la Phase 3 avec la recherche mot-clé : elle en est
-indépendante — les deux modes ne partagent ni index, ni stockage, ni chemin de code —
-et elle est optionnelle par nature. La livrer plus tôt retarderait une application
-complète pour une fonctionnalité qu'on peut ajouter sans rien casser.
-
-- [ ] Port `EmbeddingProvider` + `FakeEmbeddingProvider` (3.9), **avec ses tests d'abord**
-- [ ] Table `embeddings` (3.2) et similarité cosinus en Go pur
-- [ ] Adaptateur `OnnxEmbeddingProvider` : chargement paresseux, `yalue/onnxruntime_go`
-- [ ] Détection du modèle et `get_model_status` (3.6)
-- [ ] Bouton « Ajouter à la recherche sémantique » sur notes, instances et tâches
-- [ ] Revectorisation silencieuse, **filtrée sur les champs textuels uniquement** (2.12)
-- [ ] Bascule 🧠 dans la barre et vue résultats en mode sémantique (2.9, 2.12)
-- [ ] Vue Préférences ⚙️ (2.13)
-- [ ] Vérification manuelle de la qualité sémantique, modèle réel en place (3.10)
-
-### Phase 6 : Release
-- [ ] Build installers — **avec `onnxruntime.dll`, sans le modèle** (3.5)
-- [ ] Documentation utilisateur — dont la procédure de dépôt du modèle
-- [ ] Release notes
-- [ ] Release publique
+### Phase 3 : Vues transverses + Search — ✅ terminée
+- [x] Vue Priorités de premier niveau, split liste/détail lecture seule (2.8)
+- [x] Réunions : trois colonnes, instances, sauvegarde auto (2.7)
+- [x] Index FTS5, tenue au fil des écritures, reconstruction au démarrage
+- [x] Recherche globale, extraits surlignés, navigation au double-clic (2.9)
 
 ---
 
+### Phase 4 : Barre système et finitions (2.10)
+
+**Objectif** — l'application vit en arrière-plan et se pilote depuis la barre
+système. C'est la dernière fonctionnalité produit avant la recherche sémantique.
+
+**Prérequis déjà en place** : les icônes sont embarquées dans le binaire
+(`assets/systray/*.ico`), et `get_priority_tasks` existe depuis la Phase 3 — le
+menu n'a rien à recalculer.
+
+| # | Étape | Dépend de | Point d'attention |
+|---|---|---|---|
+| 4.1 | Ajouter `energye/systray` | — | Retenu contre `fyne.io/systray`, seul à gérer le clic sur l'icône, qu'exige le double-clic de 2.10 |
+| 4.2 | Cycle de vie : `systray.Run` en goroutine depuis `OnStartup`, `systray.Quit` dans `OnShutdown` | 4.1 | `systray.Run` bloque, comme `wails.Run` : les deux ne peuvent pas être sur le même fil |
+| 4.3 | Menu statique : « Afficher », « Quitter » | 4.2 | **À faire avant 4.4** |
+| 4.4 | **Réactiver `HideWindowOnClose`** | 4.3 | Le drapeau est à `false` et commenté dans `main.go`. Il ne doit repasser à `true` **qu'une fois « Quitter » opérationnel** : sans lui, fermer la fenêtre laisse un processus invisible et increvable, et `wails dev` ne rend jamais la main |
+| 4.5 | Menu dynamique : top 5 des tâches, compteurs Critiques et Hautes | 4.3 | `ResetMenu()` puis reconstruction, sur le timer de 30 s du §2.3 |
+| 4.6 | Clic sur une tâche du menu → afficher et naviguer | 4.5 | `runtime.WindowShow` puis `EventsEmit` ; côté React, brancher sur `ouvrir()`, déjà écrit pour Priorités et Recherche |
+| 4.7 | Icône selon l'urgence : normale / haute / critique | 4.5 | — |
+| 4.8 | Clignotement sous 5 min | 4.7 | Alternance entre l'icône du niveau courant et l'icône normale — critique ↔ normale, ou haute ↔ normale. Jamais vers une icône vide : `blank.ico` n'est pas utilisé |
+| 4.9 | Notifications d'urgence | 4.5 | `runtime.SendNotification`, natif en Wails v2.15 — aucune librairie tierce. Prévoir une **anti-répétition** : le timer de 30 s ne doit pas notifier huit fois la même tâche |
+| 4.10 | Double-clic sur l'icône → afficher/masquer | 4.2 | `SetOnDClick` |
+| 4.11 | Styling final | — | — |
+
+**Terminée quand** : fermer la fenêtre laisse l'application vivante et accessible
+par le tray ; « Quitter » arrête réellement le processus ; le menu montre les
+bonnes tâches et sait les ouvrir.
+
+---
+
+### Phase 5 : Recherche sémantique (2.12, 2.13)
+
+**Pourquoi ici et pas en Phase 3** — elle est indépendante de la recherche
+mot-clé : ni index, ni stockage, ni chemin de code communs, seulement une barre
+partagée. Et elle est optionnelle par nature. La livrer plus tôt aurait retardé
+une application complète pour une fonctionnalité qu'on peut greffer sans rien
+casser.
+
+**Ordre imposé** — les étapes 5.1 à 5.3 ne demandent ni modèle, ni DLL, ni
+réseau. Tout ce qui est testable doit être écrit et vert **avant** de toucher à
+ONNX : c'est ce qui permet, si le vrai modèle se comporte mal, de savoir que le
+problème vient de lui et non du code autour.
+
+#### Socle testable — sans modèle
+
+| # | Étape | Livrable |
+|---|---|---|
+| 5.1 | Port `EmbeddingProvider` (`Embed(text) ([]float32, error)`) + `FakeEmbeddingProvider` déterministe | `ports/`, `adapters/fake_embedding.go` |
+| 5.2 | Domaine : similarité cosinus, tri par score, empreinte du texte source | `domain/semantic/`, **tests d'abord** |
+| 5.3 | Migration 2 : table `embeddings` (3.2) + repository SQLite, tests de round-trip en `:memory:` | `adapters/sqlite/embedding_repo.go` |
+
+Les cas à couvrir en 5.2, qui sont les règles réelles de la fonctionnalité :
+similarité d'un vecteur avec lui-même = 1 ; vecteurs de dimensions différentes
+refusés ; tri décroissant stable ; empreinte identique pour un texte identique.
+
+#### Commandes et maintien de l'index — toujours sans modèle
+
+| # | Étape | Point d'attention |
+|---|---|---|
+| 5.4 | `add_to_semantic_index`, `remove_from_semantic_index`, `is_in_semantic_index` | Opt-in strict : rien ne s'indexe sans appel explicite |
+| 5.5 | `search_semantic(query)` | Vectorise la requête, balaie la table, trie par score. **Jamais fusionné** avec `search_global` |
+| 5.6 | `refresh_embedding` branché sur `UpdateNote`, `UpdateTask`, `UpdateInstanceNotes` | **Le point le plus délicat de la phase.** Ne déclencher que si un champ **textuel** a changé — nom, description, titre, contenu, notes. Ni l'importance, ni l'échéance, ni le statut, ni l'ordre. Le `source_hash` sert de second garde-fou : texte inchangé, aucun calcul |
+
+Tout ceci se teste avec le `Fake`, y compris l'absence de recalcul sur
+changement de métadonnée — qui se vérifie en comptant les appels au provider.
+
+#### Modèle réel
+
+| # | Étape | Point d'attention |
+|---|---|---|
+| 5.7 | `OnnxEmbeddingProvider` via `yalue/onnxruntime_go` | **Chargement paresseux** : à la première vectorisation, jamais au démarrage, sinon le budget de 500 ms du §3.8 saute. Vectorisation **hors du fil de l'interface** |
+| 5.8 | Détection du modèle + `get_model_status` | Une seule commande alimente la fenêtre du §2.12 et la vue du §2.13, pour qu'elles ne divergent pas |
+| 5.9 | Livrer `onnxruntime.dll` à côté de l'exécutable | Pas de CGO ajouté : la DLL est chargée à l'exécution |
+
+#### Interface
+
+| # | Étape |
+|---|---|
+| 5.10 | Bouton « Ajouter à la recherche sémantique » sur notes, instances et tâches |
+| 5.11 | Bascule 🧠 dans la barre, décochée par défaut ; vue résultats en mode sémantique — tri par score, **pas de surbrillance** |
+| 5.12 | Fenêtre « modèle absent » : chemin, noms de fichiers, lien, bouton Réessayer — **jamais de tentative automatique** |
+| 5.13 | Vue Préférences ⚙️ (2.13) |
+
+#### Vérification finale
+
+| # | Étape |
+|---|---|
+| 5.14 | Avec le vrai modèle déposé : vérifier à la main que « client mécontent » remonte une note disant « client en colère », et qu'une faute de frappe trouve quand même |
+
+Cette dernière étape est **manuelle et le restera** : un test automatique ne
+pourrait s'exécuter que contre le `Fake`, et ne prouverait donc rien sur la
+qualité sémantique (3.10).
+
+**Terminée quand** : la suite passe sans modèle installé ; avec le modèle, les
+deux modes de recherche donnent des résultats différents et cohérents ; modifier
+l'importance d'une tâche indexée ne déclenche aucun calcul.
+
+---
+
+### Phase 6 : Release
+
+| # | Étape | Point d'attention |
+|---|---|---|
+| 6.1 | **Distribution portable — pas d'installeur** | Décision : **pas de NSIS**. On livre une archive à décompresser où l'utilisateur veut : `toutdoux.exe` + `onnxruntime.dll`. Cohérent avec la contrainte de poste restreint qui a déjà orienté le choix de Wails (3.5) — rien à installer, donc aucun droit administrateur requis, et rien à désinstaller. Le modèle reste hors du paquet |
+| 6.2 | Vérifier l'icône dans l'exe et la barre des tâches | La source est `build/appicon.png` ; `build/windows/icon.ico` en est régénéré si on le supprime |
+| 6.3 | Documentation utilisateur | Dont la procédure de dépôt du modèle : où le télécharger, où le poser, sous quels noms |
+| 6.4 | Release notes | — |
+| 6.5 | Release publique | — |
+
+---
 ## 8. DÉFINITION DONE
 
 *(Inchangée depuis la v1)*
 
 ✅ Feature "done" quand :
 - Code écrit
-- Tests passent (domaine / repository / composants / E2E selon 3.10)
+- Tests passent — domaine, repository (SQLite en mémoire), composants (fixtures), selon 3.10
+- **Si la fonctionnalité est visible : l'écran a été regardé**, pas seulement compilé et testé. Une capture prise et relue, comme le décrit le niveau 4 de 3.10
 - UI/UX validée (cohérente avec le comportement du prototype de référence)
 - Docs mise à jour
 - Perf acceptable (< objectifs de 3.8)
 - Aucune erreur console
 - Données persistent correctement
+
+*Note : la ligne « tests E2E » de la v1 est retirée, le niveau ayant été abandonné (3.10).*

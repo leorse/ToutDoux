@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import type { domain, duedate } from '../../wailsjs/go/models'
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu'
@@ -68,11 +68,20 @@ export function TasksTab({
     recharger(false)
   }, [filtres])
 
-  // Arrivée depuis Priorités ou la Recherche : on sélectionne la tâche visée et
-  // on déplie toute sa chaîne d'ancêtres, sinon elle resterait invisible dans
-  // une branche repliée (§2.8, §2.9).
+  // Arrivée depuis Priorités, la Recherche ou la barre système : on sélectionne
+  // la tâche visée et on déplie sa chaîne d'ancêtres, sinon elle resterait
+  // invisible dans une branche repliée (§2.8, §2.9, §2.10).
+  //
+  // La cible n'est appliquée QU'UNE FOIS par valeur. Cet effet dépend de
+  // `tasks`, qui change à chaque écriture — or la sauvegarde du panneau de
+  // détail écrit toutes les 500 ms pendant la frappe. Sans ce garde-fou, chaque
+  // caractère tapé re-sélectionnait la tâche d'où l'on venait, arrachant le
+  // focus vers une autre ligne de l'arbre.
+  const cibleAppliquee = useRef<string | undefined>(undefined)
   useEffect(() => {
     if (!cibleTaskId || tasks.length === 0) return
+    if (cibleAppliquee.current === cibleTaskId) return
+    cibleAppliquee.current = cibleTaskId
     setSelectedId(cibleTaskId)
 
     // Remontée de la chaîne parent par parent. Ce n'est pas une règle métier

@@ -134,6 +134,84 @@ func TopPriority(tasks []domain.Task, n int) []domain.Task {
 	return due
 }
 
+// TrayLevel est le niveau d'alerte de l'icône de barre système (§2.10).
+type TrayLevel string
+
+const (
+	TrayLevelNormal   TrayLevel = "normal"
+	TrayLevelHigh     TrayLevel = "high"
+	TrayLevelCritical TrayLevel = "critical"
+)
+
+// TrayState décrit ce que l'icône de barre système doit montrer (§2.10).
+type TrayState struct {
+	Level TrayLevel `json:"level"`
+
+	// Blinking demande l'alternance entre l'icône d'horloge et l'icône du
+	// niveau courant — normale, haute ou critique.
+	//
+	// Elle vaut aussi au niveau normal : une tâche en retard mérite d'être
+	// signalée même si aucune tâche n'est critique ou haute. C'est le sens de
+	// l'horloge — elle parle du temps, pas de l'importance, et les deux
+	// dimensions sont indépendantes.
+	Blinking bool `json:"blinking"`
+
+	CriticalCount int `json:"criticalCount"`
+	HighCount     int `json:"highCount"`
+
+	// UrgentTasks liste les tâches portant l'horloge — imminentes ou en retard
+	// (§2.3). Ce sont elles qui déclenchent le clignotement.
+	UrgentTasks []domain.Task `json:"urgentTasks"`
+
+	// TasksToNotify est le sous-ensemble à signaler par une notification :
+	// uniquement celles passées sous les 5 minutes (§2.10).
+	TasksToNotify []domain.Task `json:"tasksToNotify"`
+}
+
+// Tray calcule l'état de l'icône de barre système (§2.10).
+//
+// Le niveau suit la même règle que la couleur des projets (§2.1) : le rouge
+// prime sur l'orange, une seule couleur à la fois. Seules les tâches actives
+// comptent — une critique terminée n'alerte plus.
+func Tray(tasks []domain.Task, now time.Time) TrayState {
+	s := TrayState{Level: TrayLevelNormal, UrgentTasks: []domain.Task{}, TasksToNotify: []domain.Task{}}
+
+	for _, t := range tasks {
+		if !t.Active() {
+			continue
+		}
+		switch t.Importance {
+		case domain.ImportanceCritique:
+			s.CriticalCount++
+		case domain.ImportanceHaute:
+			s.HighCount++
+		}
+		// Le clignotement reprend exactement la condition de l'icône ⏰ du §2.3 :
+		// échéance imminente **ou** dépassée. C'est la même horloge qui apparaît
+		// dans l'arbre et dans la sidebar ; la faire clignoter dans la barre
+		// système pour une autre condition serait incohérent.
+		if info := duedate.Format(t.DueDate, now); info != nil && (info.Urgent || info.Overdue) {
+			s.UrgentTasks = append(s.UrgentTasks, t)
+			// La notification, elle, reste réservée au franchissement des
+			// 5 minutes (§2.10) : signaler une tâche en retard depuis trois
+			// jours à chaque démarrage serait du bruit.
+			if info.Urgent {
+				s.TasksToNotify = append(s.TasksToNotify, t)
+			}
+		}
+	}
+
+	switch {
+	case s.CriticalCount > 0:
+		s.Level = TrayLevelCritical
+	case s.HighCount > 0:
+		s.Level = TrayLevelHigh
+	}
+
+	s.Blinking = len(s.UrgentTasks) > 0
+	return s
+}
+
 // SortProjects trie les projets pour la sidebar (§2.1).
 //
 // « Transverse / Divers » reste en première position quel que soit son ordre de

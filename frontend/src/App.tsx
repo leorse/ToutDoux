@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api } from './api'
+import { api, onEvent } from './api'
 import type { domain } from '../wailsjs/go/models'
 import { MeetingsTab } from './components/MeetingsTab'
 import { NotesTab } from './components/NotesTab'
@@ -86,6 +86,19 @@ export default function App() {
     setTab(c.noteId ? 'notes' : c.meetingId || c.instanceId ? 'meetings' : 'tasks')
     setCible(c)
   }, [])
+
+  // Ouverture depuis le menu de la barre système (§2.10).
+  //
+  // Le backend ne sait pas naviguer : il émet un événement, et l'interface
+  // emprunte exactement le même chemin que le double-clic depuis Priorités ou
+  // la Recherche. Une seule définition de « ouvrir une tâche », donc.
+  useEffect(() => {
+    const off = onEvent('open-task', (payload: { projectId: string; taskId: string }) => {
+      if (!payload?.projectId) return
+      ouvrir({ projectId: payload.projectId, taskId: payload.taskId })
+    })
+    return off
+  }, [ouvrir])
 
   const ouvrirTache = useCallback(
     (task: domain.Task) => {

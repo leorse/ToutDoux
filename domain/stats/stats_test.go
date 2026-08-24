@@ -188,3 +188,138 @@ func ids(tasks []domain.Task) []string {
 	}
 	return out
 }
+
+/* ---------------- Barre système (§2.10) ---------------- */
+
+func TestTray_LevelFollowsImportance(t *testing.T) {
+	cases := []struct {
+		name  string
+		tasks []domain.Task
+		want  TrayLevel
+	}{
+		{"rien", nil, TrayLevelNormal},
+		{"que des normales", []domain.Task{task("a", domain.ImportanceNormale, false, false, nil)}, TrayLevelNormal},
+		{"une haute", []domain.Task{task("a", domain.ImportanceHaute, false, false, nil)}, TrayLevelHigh},
+		{"une critique", []domain.Task{task("a", domain.ImportanceCritique, false, false, nil)}, TrayLevelCritical},
+		{
+			"le rouge prime sur l'orange",
+			[]domain.Task{
+				task("h", domain.ImportanceHaute, false, false, nil),
+				task("c", domain.ImportanceCritique, false, false, nil),
+			},
+			TrayLevelCritical,
+		},
+		{
+			"une critique terminée n'alerte plus",
+			[]domain.Task{task("c", domain.ImportanceCritique, true, false, nil)},
+			TrayLevelNormal,
+		},
+		{
+			"une critique annulée non plus",
+			[]domain.Task{task("c", domain.ImportanceCritique, false, true, nil)},
+			TrayLevelNormal,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Tray(c.tasks, now).Level; got != c.want {
+				t.Errorf("niveau = %q, attendu %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestTray_Counts(t *testing.T) {
+	tasks := []domain.Task{
+		task("c1", domain.ImportanceCritique, false, false, nil),
+		task("c2", domain.ImportanceCritique, false, false, nil),
+		task("h1", domain.ImportanceHaute, false, false, nil),
+		task("finie", domain.ImportanceCritique, true, false, nil),
+	}
+	s := Tray(tasks, now)
+	if s.CriticalCount != 2 {
+		t.Errorf("CriticalCount = %d, attendu 2", s.CriticalCount)
+	}
+	if s.HighCount != 1 {
+		t.Errorf("HighCount = %d, attendu 1", s.HighCount)
+	}
+}
+
+func TestTray_UrgentTasksListed(t *testing.T) {
+	tasks := []domain.Task{
+		task("urgente", domain.ImportanceCritique, false, false, at(2*time.Minute)),
+		task("plusTard", domain.ImportanceCritique, false, false, at(2*time.Hour)),
+	}
+	s := Tray(tasks, now)
+	if len(s.UrgentTasks) != 1 || s.UrgentTasks[0].ID != "urgente" {
+		t.Errorf("UrgentTasks = %v, seule \"urgente\" attendue", ids(s.UrgentTasks))
+	}
+}
+
+// Le clignotement reprend la condition de l'icône ⏰ (§2.3) : imminente OU en
+// retard. Il vaut à tous les niveaux, y compris normal — l'horloge parle du
+// temps, le niveau parle de l'importance, les deux sont indépendants.
+func TestTray_BlinkingFollowsClockCondition(t *testing.T) {
+	cases := []struct {
+		name  string
+		tasks []domain.Task
+		want  bool
+	}{
+		{
+			"en retard et critique",
+			[]domain.Task{task("a", domain.ImportanceCritique, false, false, at(-3*time.Hour))},
+			true,
+		},
+		{
+			"en retard et normale : clignote quand même",
+			[]domain.Task{task("a", domain.ImportanceNormale, false, false, at(-3*time.Hour))},
+			true,
+		},
+		{
+			"imminente et haute",
+			[]domain.Task{task("a", domain.ImportanceHaute, false, false, at(2*time.Minute))},
+			true,
+		},
+		{
+			"échéance lointaine : pas de clignotement",
+			[]domain.Task{task("a", domain.ImportanceCritique, false, false, at(72*time.Hour))},
+			false,
+		},
+		{
+			"critique sans échéance : pas de clignotement",
+			[]domain.Task{task("a", domain.ImportanceCritique, false, false, nil)},
+			false,
+		},
+		{
+			"en retard mais terminée : plus rien",
+			[]domain.Task{task("a", domain.ImportanceCritique, true, false, at(-3*time.Hour))},
+			false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Tray(c.tasks, now).Blinking; got != c.want {
+				t.Errorf("clignotement = %v, attendu %v", got, c.want)
+			}
+		})
+	}
+}
+
+// La notification reste réservée au franchissement des 5 minutes : signaler à
+// chaque démarrage une tâche en retard depuis trois jours serait du bruit.
+func TestTray_NotifyOnlyOnImminent(t *testing.T) {
+	tasks := []domain.Task{
+		task("imminente", domain.ImportanceNormale, false, false, at(2*time.Minute)),
+		task("enRetard", domain.ImportanceNormale, false, false, at(-3*time.Hour)),
+	}
+	s := Tray(tasks, now)
+
+	// Les deux font clignoter…
+	if len(s.UrgentTasks) != 2 {
+		t.Errorf("UrgentTasks = %v, les deux attendues", ids(s.UrgentTasks))
+	}
+	// …mais une seule est notifiée.
+	if len(s.TasksToNotify) != 1 || s.TasksToNotify[0].ID != "imminente" {
+		t.Errorf("TasksToNotify = %v, seule \"imminente\" attendue", ids(s.TasksToNotify))
+	}
+}

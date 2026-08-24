@@ -36,6 +36,10 @@ type App struct {
 	meetings ports.MeetingRepository
 	index    ports.SearchIndex
 	clock    ports.Clock
+
+	// tray est nil dans les tests : la barre système est un adaptateur pilote,
+	// pas une dépendance du métier.
+	tray *tray
 }
 
 // NewApp construit l'application avec ses dépendances par défaut.
@@ -91,10 +95,15 @@ func (a *App) startup(ctx context.Context) {
 	if err := a.reindexAll(); err != nil {
 		panic(fmt.Sprintf("reconstruction de l'index : %v", err))
 	}
+
+	// Barre système (§2.10). Démarrée après la base : le menu lit les tâches
+	// dès son premier cycle.
+	a.startTray()
 }
 
 // shutdown ferme proprement la base.
 func (a *App) shutdown(ctx context.Context) {
+	a.stopTray()
 	if a.db != nil {
 		a.db.Close()
 	}
@@ -224,11 +233,6 @@ func (a *App) DeleteProject(id string) error {
 }
 
 // GetSidebarStats calcule les compteurs et le code couleur d'un projet (§2.1).
-//
-// Le nombre de réunions vaut toujours 0 pour l'instant : les réunions arrivent
-// en Phase 3 et n'ont pas encore de repository. Le champ est renvoyé quand même
-// pour que le contrat exposé au frontend soit stable — l'ajouter plus tard
-// changerait la forme de la réponse.
 func (a *App) GetSidebarStats(projectID string) (stats.SidebarStats, error) {
 	tasks, err := a.tasks.ListByProject(projectID)
 	if err != nil {

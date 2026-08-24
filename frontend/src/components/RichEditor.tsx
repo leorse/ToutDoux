@@ -1,6 +1,10 @@
+import Image from '@tiptap/extension-image'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect } from 'react'
+
+/** Taille maximale d'une image collée, avant refus (§3.3). */
+const TAILLE_IMAGE_MAX = 10 * 1024 * 1024
 
 /**
  * Éditeur riche (§3.4), adossé à TipTap.
@@ -21,14 +25,63 @@ export function RichEditor({
   readOnly?: boolean
 }) {
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: [
+      StarterKit,
+      // allowBase64 : une image collée est intégrée au HTML de la note. C'est
+      // ce qui garantit qu'elle survit hors ligne, sans dépendre d'un serveur
+      // (§3.3). Le basculement vers un fichier au-delà de 50 Ko viendra avec le
+      // stockage d'images ; pour l'instant tout est en ligne.
+      Image.configure({ allowBase64: true }),
+    ],
     content,
     editable: !readOnly,
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
     onBlur: () => onBlur?.(),
     editorProps: {
-      attributes: {
-        class: 'prose prose-sm max-w-none min-h-full p-3 focus:outline-none',
+      attributes: { class: 'min-h-full p-3' },
+
+      /**
+       * Collage d'une image présente dans le presse-papier (§3.4).
+       *
+       * On ne traite que les images **binaires** — une capture d'écran, ou une
+       * image copiée depuis un navigateur. Elles sont converties en data URI et
+       * insérées, donc disponibles hors ligne.
+       */
+      handlePaste(view, event) {
+        const fichiers = Array.from(event.clipboardData?.files ?? [])
+        const image = fichiers.find((f) => f.type.startsWith('image/'))
+        if (!image) return false
+
+        if (image.size > TAILLE_IMAGE_MAX) {
+          // Refus explicite plutôt que collage silencieux d'un fichier énorme,
+          // qui gonflerait la base sans que personne ne comprenne pourquoi.
+          window.alert("L'image dépasse 10 Mo et n'a pas été collée.")
+          return true
+        }
+
+        const lecteur = new FileReader()
+        lecteur.onload = () => {
+          const src = String(lecteur.result)
+          const node = view.state.schema.nodes.image?.create({ src })
+          if (!node) return
+          view.dispatch(view.state.tr.replaceSelectionWith(node))
+        }
+        lecteur.readAsDataURL(image)
+        return true // on a pris la main : ProseMirror ne doit pas coller en plus
+      },
+
+      /**
+       * Nettoyage du HTML collé (§3.4).
+       *
+       * Les images référencées par une URL distante sont **retirées**, pas
+       * rapatriées : l'application n'accède jamais au réseau (§6). Les laisser
+       * produirait des images cassées dès la première ouverture hors ligne,
+       * ce qui est pire qu'une absence visible.
+       */
+      transformPastedHTML(html) {
+        return html.replace(/<img\b[^>]*>/gi, (balise) =>
+          /src\s*=\s*["']data:/i.test(balise) ? balise : '',
+        )
       },
     },
   })
@@ -69,6 +122,10 @@ export function RichEditor({
           <Outil editor={editor} actif="codeBlock" label="Bloc de code" onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
             {'</>'}
           </Outil>
+          <span aria-hidden className="mx-1 h-5 w-px self-center bg-neutral-300" />
+          <Outil editor={editor} actif="link" label="Lien" onClick={() => poserLien(editor)}>
+            🔗
+          </Outil>
         </div>
       ) : null}
       <div className="min-h-0 flex-1 overflow-auto">
@@ -76,6 +133,17 @@ export function RichEditor({
       </div>
     </div>
   )
+}
+
+/** Pose ou retire un lien sur la sélection courante. */
+function poserLien(editor: NonNullable<ReturnType<typeof useEditor>>) {
+  if (editor.isActive('link')) {
+    editor.chain().focus().unsetLink().run()
+    return
+  }
+  const url = window.prompt('Adresse du lien ?')
+  if (!url?.trim()) return
+  editor.chain().focus().setLink({ href: url.trim() }).run()
 }
 
 /** Bouton de la barre d'outils, dont l'état actif suit la sélection courante. */

@@ -24,3 +24,105 @@ body {
      débordement horizontal du corps. */
   overflow: hidden;
 }
+
+/* ---------------------------------------------------------------------------
+   Contenu de l'éditeur riche (§3.4)
+
+   Tailwind applique un reset qui supprime les puces des listes, les marges des
+   paragraphes et le style des liens. C'est voulu pour une interface, mais du
+   contenu rédigé doit ressembler à du texte : sans ces règles, une liste à
+   puces est indiscernable d'un paragraphe, et un lien d'un mot ordinaire.
+
+   Les styles sont portés ici plutôt que par @tailwindcss/typography : le jeu
+   d'éléments produit par TipTap est borné et connu (StarterKit), une dépendance
+   supplémentaire n'apporterait que du volume.
+--------------------------------------------------------------------------- */
+
+.ProseMirror {
+  outline: none;
+}
+
+.ProseMirror > * + * {
+  margin-top: 0.6em;
+}
+
+.ProseMirror p {
+  min-height: 1.2em; /* un paragraphe vide reste visible et cliquable */
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.5rem;
+}
+
+.ProseMirror ul {
+  list-style: disc;
+}
+
+.ProseMirror ol {
+  list-style: decimal;
+}
+
+.ProseMirror li > p {
+  margin: 0; /* TipTap enveloppe le contenu des items dans un <p> */
+}
+
+.ProseMirror li::marker {
+  color: #525252;
+}
+
+.ProseMirror a {
+  color: #1d4ed8;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ProseMirror h1 { font-size: 1.5em; font-weight: 700; }
+.ProseMirror h2 { font-size: 1.3em; font-weight: 700; }
+.ProseMirror h3 { font-size: 1.1em; font-weight: 600; }
+
+.ProseMirror code {
+  background: #f5f5f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.ProseMirror pre {
+  background: #f5f5f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 4px;
+  padding: 0.6em 0.8em;
+  overflow-x: auto;
+}
+
+/* Le <code> dans un <pre> ne doit pas cumuler les deux encadrés. */
+.ProseMirror pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.ProseMirror blockquote {
+  border-left: 3px solid #d4d4d4;
+  padding-left: 0.8em;
+  color: #525252;
+}
+
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid #d4d4d4;
+}
+
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+/* L'image sélectionnée doit se voir, sinon on ne sait pas ce qu'on supprime. */
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid var(--color-selection);
+}

@@ -39,10 +39,18 @@ export function TaskDetail({ task, due, readOnly, onPatch, onQuickDue, onSetDue 
   const [nom, setNom] = useState('')
   const [description, setDescription] = useState('')
 
+  // Réinitialisation sur le seul changement de tâche.
+  //
+  // Dépendre aussi de `task.name` et `task.description` était un défaut : la
+  // sauvegarde à 500 ms renvoie la tâche écrite, et l'effet réinjectait alors
+  // cette valeur dans le champ. Les caractères tapés pendant l'aller-retour
+  // étaient écrasés et le curseur sautait en fin de ligne. Ce que le serveur
+  // renvoie est ce que l'utilisateur vient d'envoyer : il n'y a rien à en
+  // réapprendre tant qu'on reste sur la même tâche.
   useEffect(() => {
     setNom(task?.name ?? '')
     setDescription(task?.description ?? '')
-  }, [task?.id, task?.name, task?.description])
+  }, [task?.id])
 
   // Sauvegarde à 500 ms pour les tâches (§2.6), avec flush immédiat au blur.
   const nomSave = useAutosave((valeur: string) => onPatch({ name: valeur }), 500)

@@ -10,14 +10,19 @@ import "embed"
 var systrayIcons embed.FS
 
 // États de l'icône de la barre système, par urgence croissante (§2.10).
+//
+// Il n'y a pas d'icône vide : le clignotement alterne entre l'icône du niveau
+// courant et TrayNormal — critique ↔ normale, ou haute ↔ normale. Alterner vers
+// une icône vide donnerait l'impression que l'application a disparu de la barre.
+// Le fichier assets/systray/blank.ico n'est donc pas utilisé.
 const (
 	TrayNormal   = "assets/systray/normal.ico"
 	TrayHigh     = "assets/systray/high.ico"
 	TrayCritical = "assets/systray/critical.ico"
 
-	// TrayBlank sert uniquement à l'alternance du clignotement : il n'existe
-	// pas d'API "faire clignoter", on bascule entre deux icônes sur un timer.
-	TrayBlank = "assets/systray/blank.ico"
+	// TrayClock alterne avec l'icône du niveau quand une tâche est imminente
+	// ou en retard (§2.10).
+	TrayClock = "assets/systray/clock.ico"
 )
 
 // TrayIcon renvoie les octets de l'icône demandée.
