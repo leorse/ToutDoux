@@ -519,9 +519,19 @@ Quitter
 **Notification**
 - Si une tâche devient urgente (< 5min) : titre "Tâche Urgente!", message "[Projet] Tâche (dans 2 min)", son système
 
-**Comportement du bouton "X" de la fenêtre**
-- Ne ferme PAS l'app : cache la fenêtre, l'app continue en arrière-plan
-- Notification : "App réduite en arrière-plan"
+**Comportement du bouton "X" de la fenêtre — révisé**
+
+- Le X **ferme réellement l'application**
+- **Réduire** la fenêtre la laisse dans la barre des tâches, comme n'importe quelle application
+- L'icône de barre système sert à **consulter les priorités** et à **quitter** ; un clic dessus ramène la fenêtre au premier plan
+
+*Révision de la v1, qui prévoyait que le X masque la fenêtre et laisse l'application vivre en arrière-plan. Ce comportement a été implémenté puis retiré : il oblige à suivre l'état d'affichage d'une fenêtre que Wails masque sans prévenir, et toutes les variantes essayées ont fini par figer l'icône de la barre système ou par empêcher l'application de s'arrêter. Le rapport entre le bénéfice — éviter un relancement — et le coût en fiabilité ne le justifiait pas.*
+
+**Contenu du menu (clic droit)**
+- Les 5 tâches prioritaires, cliquables (ouvrent la tâche dans l'application)
+- « Quitter »
+
+Les compteurs de tâches critiques et hautes sont dans **l'infobulle** de l'icône plutôt que dans le menu : l'infobulle passe par `Shell_NotifyIcon` et ne touche pas au menu Windows, dont chaque modification s'est révélée être un risque de blocage.
 
 ---
 
@@ -888,9 +898,17 @@ Trois décisions, et leurs raisons :
 
 **Le modèle n'est pas dans le paquet, le runtime si.** La distinction est volontaire et tient à la nature des deux : `onnxruntime.dll` est une bibliothèque d'exécution, du même ordre que le runtime WebView2, et la livrer à côté de l'exécutable ne pose pas plus de question que n'importe quelle dépendance. Le modèle, lui, est une donnée de 120 Mo qui quadruplerait le poids de la distribution pour une fonctionnalité optionnelle que tous les utilisateurs n'activeront pas.
 
-L'application est distribuée **en portable, sans installeur** (§7, Phase 6) : une archive à décompresser, `toutdoux.exe` et `onnxruntime.dll` côte à côte.
+**`yalue/onnxruntime_go` charge la DLL dynamiquement**, à l'exécution : il n'y a rien à lier au moment du build, et la bibliothèque peut être remplacée sans recompiler.
 
-**`yalue/onnxruntime_go` charge la DLL dynamiquement**, à l'exécution, et n'impose donc **pas de CGO à la compilation**. C'est ce qui permet à cette fonctionnalité de ne pas remettre en cause la chaîne de build sans compilateur C établie plus haut — c'était une condition d'acceptation, pas un heureux hasard. Concrètement, il y a un fichier de plus à côté de l'exécutable, et rien ne change au `wails build`.
+> **Correction — cette section affirmait que la recherche sémantique n'imposait pas de CGO. C'est faux, et la vérification l'a montré à l'implémentation (§7, étape 5.7).** `yalue/onnxruntime_go` contient un `onnxruntime_wrapper.c` et un `import "C"` : le *chargement* de la DLL est dynamique, mais la *compilation* du paquet passe bien par CGO.
+>
+> Conséquence concrète : construire Tout Doux exige désormais un compilateur C sur le PATH. La machine de développement en a un — MSYS2/mingw-w64, déjà installé sans droits administrateur, et c'est ce qui rend la correction acceptable plutôt que bloquante (§3.5, plus haut). Mais la propriété « chaîne de build sans compilateur C » est perdue.
+>
+> Ce qui reste vrai, et qui portait l'essentiel de la décision : `modernc.org/sqlite` garde la **persistance** en Go pur. Un poste qui ne pourrait pas compiler la partie ONNX pourrait toujours construire une application complète en retirant l'adaptateur `adapters/onnx` — la recherche sémantique est la seule fonctionnalité concernée, et elle est optionnelle par conception.
+
+**Version du runtime imposée.** `onnxruntime_go` v1.35.0 demande l'API ONNX Runtime 29, donc **onnxruntime 1.29.0**, sans repli : une DLL plus ancienne fait échouer l'initialisation avec un message peu parlant (« Error setting ORT API base »). La bibliothèque est fournie dans le module Go lui-même (`test_data/onnxruntime.dll`), ce qui évite un téléchargement séparé — c'est de là que vient celle qui est livrée avec l'application.
+
+L'application est distribuée **en portable, sans installeur** (§7, Phase 6) : une archive à décompresser, `toutdoux.exe` et `onnxruntime.dll` côte à côte. Le fournisseur cherche la bibliothèque à côté de l'exécutable, puis dans le répertoire courant — ce qui rend `wails dev` utilisable, l'exécutable y étant reconstruit dans un dossier temporaire —, puis dans le dossier des modèles.
 
 ---
 
@@ -1223,10 +1241,11 @@ de construire au-dessus du vide.
 
 ---
 
-### Phase 4 : Barre système et finitions (2.10)
+### Phase 4 : Barre système et finitions (2.10) — ✅ terminée
 
-**Objectif** — l'application vit en arrière-plan et se pilote depuis la barre
-système. C'est la dernière fonctionnalité produit avant la recherche sémantique.
+**Objectif** — les priorités sont consultables sans ouvrir la fenêtre, et
+l'application se pilote depuis la barre système. C'est la dernière
+fonctionnalité produit avant la recherche sémantique.
 
 **Prérequis déjà en place** : les icônes sont embarquées dans le binaire
 (`assets/systray/*.ico`), et `get_priority_tasks` existe depuis la Phase 3 — le
@@ -1234,25 +1253,25 @@ menu n'a rien à recalculer.
 
 | # | Étape | Dépend de | Point d'attention |
 |---|---|---|---|
-| 4.1 | Ajouter `energye/systray` | — | Retenu contre `fyne.io/systray`, seul à gérer le clic sur l'icône, qu'exige le double-clic de 2.10 |
+| 4.1 | Ajouter `energye/systray` | — | Retenu contre `fyne.io/systray`, seul à exposer `SetOnClick`/`SetOnDClick` |
 | 4.2 | Cycle de vie : `systray.Run` en goroutine depuis `OnStartup`, `systray.Quit` dans `OnShutdown` | 4.1 | `systray.Run` bloque, comme `wails.Run` : les deux ne peuvent pas être sur le même fil |
-| 4.3 | Menu statique : « Afficher », « Quitter » | 4.2 | **À faire avant 4.4** |
-| 4.4 | **Réactiver `HideWindowOnClose`** | 4.3 | Le drapeau est à `false` et commenté dans `main.go`. Il ne doit repasser à `true` **qu'une fois « Quitter » opérationnel** : sans lui, fermer la fenêtre laisse un processus invisible et increvable, et `wails dev` ne rend jamais la main |
-| 4.5 | Menu dynamique : top 5 des tâches, compteurs Critiques et Hautes | 4.3 | `ResetMenu()` puis reconstruction, sur le timer de 30 s du §2.3 |
-| 4.6 | Clic sur une tâche du menu → afficher et naviguer | 4.5 | `runtime.WindowShow` puis `EventsEmit` ; côté React, brancher sur `ouvrir()`, déjà écrit pour Priorités et Recherche |
+| 4.3 | Menu : 5 emplacements de tâches + « Quitter » | 4.2 | Construit **une seule fois**. Voir 4.5 |
+| 4.4 | ~~Réactiver `HideWindowOnClose`~~ — **abandonné** | — | Le drapeau reste à `false`. Le X ferme l'application : voir 2.10 pour la décision et le commentaire de `main.go` pour le piège `OnBeforeClose` |
+| 4.5 | Libellés du top 5 rafraîchis sur le timer de 30 s du §2.3 | 4.3 | **Pas de `ResetMenu()`** : il fuit et fige l'icône. On réécrit les titres, et **seulement ceux qui ont changé** |
+| 4.6 | Clic sur une tâche du menu → afficher et naviguer | 4.5 | `WindowUnminimise` + `WindowShow` puis `EventsEmit` ; côté React, branché sur `ouvrir()`, déjà écrit pour Priorités et Recherche |
 | 4.7 | Icône selon l'urgence : normale / haute / critique | 4.5 | — |
-| 4.8 | Clignotement sous 5 min | 4.7 | Alternance entre l'icône du niveau courant et l'icône normale — critique ↔ normale, ou haute ↔ normale. Jamais vers une icône vide : `blank.ico` n'est pas utilisé |
-| 4.9 | Notifications d'urgence | 4.5 | `runtime.SendNotification`, natif en Wails v2.15 — aucune librairie tierce. Prévoir une **anti-répétition** : le timer de 30 s ne doit pas notifier huit fois la même tâche |
-| 4.10 | Double-clic sur l'icône → afficher/masquer | 4.2 | `SetOnDClick` |
+| 4.8 | Clignotement sous 5 min | 4.7 | Alternance entre l'icône horloge et celle du niveau courant. Jamais vers une icône vide : `blank.ico` n'est pas utilisé |
+| 4.9 | Notifications d'urgence | 4.5 | `runtime.SendNotification`, natif en Wails v2.15 — aucune librairie tierce. **Anti-répétition** : le timer de 30 s ne doit pas notifier huit fois la même tâche |
+| 4.10 | Clic et double-clic sur l'icône → afficher la fenêtre | 4.2 | `SetOnClick` et `SetOnDClick`, tous deux vers l'affichage. Pas de bascule : masquer la fenêtre imposerait de suivre son état, ce que 2.10 a écarté. **Le gestionnaire délègue à une goroutine** : il s'exécute dans la boucle de messages, où tout appel bloquant fige l'icône |
 | 4.11 | Styling final | — | — |
 
-**Terminée quand** : fermer la fenêtre laisse l'application vivante et accessible
-par le tray ; « Quitter » arrête réellement le processus ; le menu montre les
-bonnes tâches et sait les ouvrir.
+**Terminée quand** : le menu montre les bonnes tâches et sait les ouvrir ;
+cliquer sur l'icône ramène la fenêtre, même réduite ; « Quitter » et le X
+arrêtent tous deux réellement le processus.
 
 ---
 
-### Phase 5 : Recherche sémantique (2.12, 2.13)
+### Phase 5 : Recherche sémantique (2.12, 2.13) — ✅ terminée
 
 **Pourquoi ici et pas en Phase 3** — elle est indépendante de la recherche
 mot-clé : ni index, ni stockage, ni chemin de code communs, seulement une barre
@@ -1265,7 +1284,7 @@ réseau. Tout ce qui est testable doit être écrit et vert **avant** de toucher
 ONNX : c'est ce qui permet, si le vrai modèle se comporte mal, de savoir que le
 problème vient de lui et non du code autour.
 
-#### Socle testable — sans modèle
+#### Socle testable — sans modèle ✅
 
 | # | Étape | Livrable |
 |---|---|---|
@@ -1273,30 +1292,110 @@ problème vient de lui et non du code autour.
 | 5.2 | Domaine : similarité cosinus, tri par score, empreinte du texte source | `domain/semantic/`, **tests d'abord** |
 | 5.3 | Migration 2 : table `embeddings` (3.2) + repository SQLite, tests de round-trip en `:memory:` | `adapters/sqlite/embedding_repo.go` |
 
-Les cas à couvrir en 5.2, qui sont les règles réelles de la fonctionnalité :
+Les cas couverts en 5.2, qui sont les règles réelles de la fonctionnalité :
 similarité d'un vecteur avec lui-même = 1 ; vecteurs de dimensions différentes
 refusés ; tri décroissant stable ; empreinte identique pour un texte identique.
 
-#### Commandes et maintien de l'index — toujours sans modèle
+Le `Fake` est un **sac de mots haché puis normalisé** : deux textes partageant
+des mots sont plus proches que deux textes qui n'en partagent aucun. Ça n'imite
+pas le sens, mais ça rend les tests de tri lisibles sur des données réelles au
+lieu de vecteurs arbitraires.
+
+Deux décisions prises en écrivant 5.2, qui ne figuraient pas dans le plan :
+
+- **Un seuil de similarité** (`DefaultMinScore`). Sans lui, une recherche
+  sémantique rend *toujours* l'index entier : la similarité cosinus n'est
+  presque jamais nulle, et les dernières lignes seraient du bruit pur présenté
+  comme des résultats.
+- **Les vecteurs de dimension incompatible sont ignorés, pas remontés en
+  erreur.** Ils viennent d'un modèle antérieur ; faire échouer toute la
+  recherche parce qu'un vieux vecteur traîne priverait l'utilisateur des
+  résultats valides.
+
+#### Commandes et maintien de l'index — toujours sans modèle ✅
 
 | # | Étape | Point d'attention |
 |---|---|---|
 | 5.4 | `add_to_semantic_index`, `remove_from_semantic_index`, `is_in_semantic_index` | Opt-in strict : rien ne s'indexe sans appel explicite |
 | 5.5 | `search_semantic(query)` | Vectorise la requête, balaie la table, trie par score. **Jamais fusionné** avec `search_global` |
-| 5.6 | `refresh_embedding` branché sur `UpdateNote`, `UpdateTask`, `UpdateInstanceNotes` | **Le point le plus délicat de la phase.** Ne déclencher que si un champ **textuel** a changé — nom, description, titre, contenu, notes. Ni l'importance, ni l'échéance, ni le statut, ni l'ordre. Le `source_hash` sert de second garde-fou : texte inchangé, aucun calcul |
+| 5.6 | `refresh_embedding` branché sur `UpdateNote`, `UpdateTask`, `UpdateInstanceNotes` | **Le point le plus délicat de la phase.** Ne déclencher que si un champ **textuel** a changé — nom, description, titre, contenu, notes. Ni l'importance, ni l'échéance, ni le statut, ni l'ordre |
 
 Tout ceci se teste avec le `Fake`, y compris l'absence de recalcul sur
 changement de métadonnée — qui se vérifie en comptant les appels au provider.
 
-#### Modèle réel
+**Comment 5.6 a été réalisé.** Le filtrage ne compare pas les champs un à un :
+il recalcule l'empreinte du texte source et s'arrête si elle est inchangée. Le
+résultat est le même, et la règle ne peut pas se désynchroniser du modèle de
+données — ajouter demain un champ textuel à une tâche n'obligera pas à penser à
+l'inscrire aussi dans une liste de champs surveillés.
+
+Trois portes en tout, dans l'ordre : entité hors index (opt-in non donné),
+empreinte inchangée (le cas dominant, la sauvegarde automatique réenregistrant
+sans arrêt le même contenu), modèle absent (limite connue du §2.12).
+
+La revectorisation part **en arrière-plan** : sans cela, chaque sauvegarde
+automatique attendrait quelques centaines de millisecondes avant de rendre la
+main à l'éditeur. L'exécution passe par un champ `enArrierePlan` injectable, que
+les tests remplacent par un appel synchrone — une goroutine ne s'observe pas de
+façon déterministe, et un test qui « attend un peu » échoue un jour sur une
+machine chargée.
+
+Les suppressions purgent l'index : tâche et descendance, note, réunion et
+instances, projet. Ce dernier n'est pas un confort mais une nécessité :
+`embeddings` porte une clé étrangère sur `projects`, et sans purge la
+suppression d'un projet échouerait sur une violation de contrainte.
+
+#### Modèle réel ✅
 
 | # | Étape | Point d'attention |
 |---|---|---|
-| 5.7 | `OnnxEmbeddingProvider` via `yalue/onnxruntime_go` | **Chargement paresseux** : à la première vectorisation, jamais au démarrage, sinon le budget de 500 ms du §3.8 saute. Vectorisation **hors du fil de l'interface** |
-| 5.8 | Détection du modèle + `get_model_status` | Une seule commande alimente la fenêtre du §2.12 et la vue du §2.13, pour qu'elles ne divergent pas |
-| 5.9 | Livrer `onnxruntime.dll` à côté de l'exécutable | Pas de CGO ajouté : la DLL est chargée à l'exécution |
+| 5.7 | `OnnxEmbeddingProvider` via `yalue/onnxruntime_go` | **Chargement paresseux** : à la première vectorisation, jamais au démarrage, sinon le budget de 500 ms du §3.8 saute |
+| 5.8 | Détection du modèle + `get_model_status` | Une seule commande alimente la fenêtre du §2.12 et la vue du §2.13, pour qu'elles ne divergent pas. Relit le disque à chaque appel, sans cache : c'est ce qui donne son sens au bouton « Réessayer ». Un fichier de taille nulle compte comme absent — c'est ce que laisse un téléchargement interrompu |
+| 5.9 | Livrer `onnxruntime.dll` à côté de l'exécutable | Fourni par le module Go lui-même. **Impose CGO au build** : voir la correction du §3.5 |
 
-#### Interface
+**Le tokenizer, qui était le point bloquant.** Le doute portait sur le couple
+Unigram + normaliseur Precompiled de XLM-RoBERTa, qu'aucune bibliothèque Go
+pure ne documente. Le vrai `tokenizer.json` a tranché : les quatre étapes du
+pipeline sont réimplémentées dans `adapters/onnx/tokenizer.go`, soit environ
+200 lignes.
+
+| Étape du pipeline | Réalisation |
+|---|---|
+| `normalizer` : Precompiled + collapse des espaces | **NFKC** via `golang.org/x/text`, puis collapse. Seul écart au modèle de référence |
+| `pre_tokenizer` : Metaspace | Espace → `▁`, plus un `▁` en tête |
+| `model` : Unigram, 250 002 pièces | **Viterbi** sur les log-probabilités du vocabulaire |
+| `post_processor` : TemplateProcessing | `<s>` … `</s>`, troncature à 512 positions |
+
+**L'écart sur le normaliseur est assumé et localisé.** `Precompiled` est une
+table SentencePiece sérialisée (trie à double tableau) d'environ 200 Ko, dont le
+décodage représenterait plus de code que tout le reste du fichier. Elle applique
+pour l'essentiel NFKC, qu'on applique donc directement. Ce que ça peut coûter :
+un découpage légèrement différent sur des caractères exotiques. Ce que ça ne
+coûte pas : la cohérence — requête et documents passent par le même tokenizer,
+donc les vecteurs restent comparables entre eux, seule propriété dont la
+recherche a besoin.
+
+Le tokenizer est vérifié contre le **vrai fichier**, pas contre un vocabulaire
+fabriqué : identifiants spéciaux à leur place, découpage couvrant exactement le
+texte, et score de Viterbi jamais inférieur à celui d'un glouton « plus longue
+pièce d'abord ». Sur `Le client est mécontent` il produit
+`▁Le ▁client ▁est ▁mé content`, ce qu'on attend de ce modèle.
+
+**Deux découvertes qui ont changé le code, contre ce que supposait le plan.**
+
+- **Le graphe consomme `token_type_ids`**, ce qu'on n'attend pas d'un
+  XLM-RoBERTa. Les noms d'entrées et de sortie ont été lus dans le fichier
+  `model.onnx` lui-même plutôt que supposés.
+- **La famille e5 distingue requête et passage par un préfixe d'entraînement**
+  (`query: ` / `passage: `). Les confondre dégrade la pertinence, donc le port
+  `EmbeddingProvider` porte deux méthodes, `Embed` et `EmbedQuery`, plutôt que
+  de laisser l'appelant fabriquer un préfixe qui dépend du modèle choisi.
+
+La sortie `last_hidden_state` est réduite par **moyenne sur les jetons puis
+normalisation L2** — la recette de e5. Prendre le seul jeton `<s>` donnerait des
+vecteurs nettement moins bons : e5 n'est pas entraîné ainsi.
+
+#### Interface ✅
 
 | # | Étape |
 |---|---|
@@ -1305,19 +1404,60 @@ changement de métadonnée — qui se vérifie en comptant les appels au provide
 | 5.12 | Fenêtre « modèle absent » : chemin, noms de fichiers, lien, bouton Réessayer — **jamais de tentative automatique** |
 | 5.13 | Vue Préférences ⚙️ (2.13) |
 
-#### Vérification finale
+Trois points sur lesquels l'interface est plus stricte que le plan :
 
-| # | Étape |
-|---|---|
-| 5.14 | Avec le vrai modèle déposé : vérifier à la main que « client mécontent » remonte une note disant « client en colère », et qu'une faute de frappe trouve quand même |
+- **Le lien de téléchargement est du texte copiable, jamais une ancre.** Un clic
+  sur un `<a href>` dans la WebView déclencherait une navigation sortante, que
+  le §6 interdit. L'utilisateur copie et ouvre depuis un poste connecté.
+- **La bascule 🧠 vérifie avant de basculer.** Sans modèle, elle ne s'active pas
+  et ouvre la fenêtre : basculer d'abord pour n'afficher qu'une erreur ensuite
+  laisserait l'interface dans un mode incapable de rien rendre.
+- **Le moteur d'inférence figure à côté du modèle** dans les deux écrans. Voir
+  une seule moitié du problème conduirait à retélécharger 120 Mo pour rien.
 
-Cette dernière étape est **manuelle et le restera** : un test automatique ne
-pourrait s'exécuter que contre le `Fake`, et ne prouverait donc rien sur la
-qualité sémantique (3.10).
+Le libellé de l'index vide est traité comme une règle, pas comme un texte : la
+vue dit « l'index sémantique est vide, ajoute des éléments avec leur bouton 🧠 »
+et non « aucun résultat », qui ferait croire à une absence de contenu
+correspondant.
+
+#### L'échelle des scores, découverte à la mesure
+
+Le plan prévoyait un seuil absolu de similarité. **Mesuré sur le vrai modèle, il
+ne filtre rien** : tout se situe entre 0,79 et 0,88, y compris une requête sans
+le moindre rapport avec le document.
+
+| Requête | Meilleur | Deuxième | Pire |
+|---|---|---|---|
+| « réuion de cadrage » | 0,873 *(réunion de cadrage)* | 0,834 | 0,797 |
+| « client mécontent » | 0,846 *(client en colère)* | 0,841 | 0,804 |
+| « gâteau » | 0,829 *(recette de tarte)* | 0,828 | 0,810 |
+
+Deux conséquences, toutes deux inscrites dans le code :
+
+- **La coupe est relative, pas absolue.** `CutRelative` écarte ce qui s'éloigne
+  de plus de 0,03 du meilleur score. Quand une réponse se détache, la traîne
+  tombe ; quand rien ne se détache — la ligne « gâteau » ci-dessus —, la liste
+  passe entière, ce qui est honnête : le modèle ne sait effectivement pas
+  trancher. Le seuil absolu reste, à 0,70, comme simple garde-fou contre
+  l'aberration.
+- **Le score n'est pas affiché en clair.** « 83 % » se lirait comme une
+  quasi-certitude alors que seul l'écart entre deux lignes veut dire quelque
+  chose. Il reste consultable en infobulle.
+
+#### Vérification finale ✅
+
+| # | Étape | Résultat |
+|---|---|---|
+| 5.14 | Avec le vrai modèle déposé : reformulation et faute de frappe | « client mécontent » remonte « le client est en colère » (0,846) devant « matériel de bureau » (0,831) ; « réuion de cadrage » remonte « préparer la réunion de cadrage » (0,873) devant tout le reste |
+
+Ces deux cas sont **automatisés** dans `adapters/onnx/provider_test.go`, mais les
+tests se sautent d'eux-mêmes si le modèle n'est pas déposé : ils ne peuvent donc
+pas tenir lieu de garantie en intégration continue, et la qualité sémantique
+reste une vérification manuelle (§3.10).
 
 **Terminée quand** : la suite passe sans modèle installé ; avec le modèle, les
 deux modes de recherche donnent des résultats différents et cohérents ; modifier
-l'importance d'une tâche indexée ne déclenche aucun calcul.
+l'importance d'une tâche indexée ne déclenche aucun calcul. — **Atteint.**
 
 ---
 

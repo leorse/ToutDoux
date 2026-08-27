@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -16,14 +17,31 @@ import (
 /*
 Barre système (§2.10).
 
-Ce fichier est un adaptateur pilote, au même titre que app.go : il ne décide
-rien. Le niveau de l'icône, le clignotement et la liste des tâches urgentes sont
-calculés par stats.Tray ; ce code se contente de les afficher et de réagir aux
-clics.
+Rôle : montrer l'urgence par l'icône, donner accès aux tâches prioritaires, et
+permettre de quitter. Un clic sur l'icône ramène la fenêtre au premier plan.
+
+La fenêtre n'est jamais masquée : le bouton X ferme l'application pour de bon,
+et la réduire la laisse dans la barre des tâches, comme n'importe quelle
+application. C'est ce qui rend ce fichier simple — il n'y a aucun état
+d'affichage à suivre.
+
+Deux contraintes de la librairie systray restent structurantes, apprises à la
+dure ; les ignorer produit une icône qui se fige :
+
+ 1. Les gestionnaires de clic sont appelés **de façon synchrone dans la
+    procédure de fenêtre** (wndProc → WM_COMMAND → item.click()). Tout appel
+    bloquant à cet endroit fige la boucle de messages, et l'icône cesse de
+    répondre à tous les clics. Chaque gestionnaire délègue donc à une goroutine.
+
+ 2. ResetMenu() recrée le menu Windows sans détruire le précédent et ne purge
+    jamais sa table d'entrées : une poignée de fenêtre fuit à chaque appel. Le
+    menu est donc construit **une seule fois** ; seuls les libellés changent
+    ensuite, et uniquement lorsqu'ils diffèrent réellement — écrire dans le menu
+    est l'opération la plus risquée du lot, autant ne le faire qu'à bon escient.
 */
 
 const (
-	// Rythme de recalcul du menu et de l'icône, aligné sur celui de l'interface
+	// Rythme de recalcul de l'état affiché, aligné sur celui de l'interface
 	// (§2.3) : les deux doivent montrer la même chose au même moment.
 	trayRefresh = 30 * time.Second
 
@@ -33,6 +51,9 @@ const (
 
 	// Nombre d'entrées de tâches dans le menu (§2.10, « Top 5 »).
 	trayTopN = 5
+
+	// Libellé des emplacements sans tâche à afficher.
+	placeholderVide = "—"
 )
 
 // tray porte l'état de l'icône de barre système.
@@ -41,17 +62,23 @@ type tray struct {
 
 	mu       sync.Mutex
 	state    stats.TrayState
-	tasks    []domain.Task
 	inverted bool // phase courante du clignotement
+	cycles   int  // nombre de rafraîchissements, pour le journal
+
+	// slotTasks est la tâche affichée par chaque entrée de menu. Les entrées
+	// sont fixes, leur contenu change : un gestionnaire de clic lit la tâche ici
+	// plutôt que de la capturer à la construction du menu.
+	slotTasks []domain.Task
+
+	// libelles retient le texte actuellement écrit dans chaque entrée, pour
+	// n'écrire dans le menu que lorsque quelque chose a réellement changé.
+	libelles []string
 
 	// notified retient les tâches déjà signalées, pour ne pas répéter la même
-	// notification à chaque rafraîchissement. Une tâche en sort dès qu'elle
-	// n'est plus urgente, ce qui la rend de nouveau notifiable si son échéance
-	// est repoussée puis redevient imminente.
+	// notification à chaque rafraîchissement.
 	notified map[string]bool
 
-	// entrées de menu conservées pour être reconstruites à chaque cycle
-	quit *systray.MenuItem
+	slots []*systray.MenuItem
 
 	stop chan struct{}
 }
@@ -61,7 +88,12 @@ type tray struct {
 // systray.Run bloque, exactement comme wails.Run : les deux ne peuvent pas
 // occuper le même fil, d'où la goroutine.
 func (a *App) startTray() {
-	a.tray = &tray{app: a, notified: map[string]bool{}, stop: make(chan struct{})}
+	a.tray = &tray{
+		app:      a,
+		notified: map[string]bool{},
+		libelles: make([]string, trayTopN),
+		stop:     make(chan struct{}),
+	}
 	go systray.Run(a.tray.onReady, func() {})
 }
 
@@ -79,25 +111,65 @@ func (t *tray) onReady() {
 	systray.SetTitle("Tout Doux")
 	systray.SetTooltip("Tout Doux")
 
-	// Double-clic sur l'icône : affiche ou masque la fenêtre (§2.10).
-	systray.SetOnDClick(func(systray.IMenu) { t.toggleWindow() })
+	// Clic et double-clic ramènent la fenêtre au premier plan (§2.10). Il n'y a
+	// pas de bascule : la fenêtre n'est jamais masquée par l'application.
+	systray.SetOnClick(func(systray.IMenu) {
+		log.Printf("[tray] ICÔNE clic gauche  %s", t.etat())
+		t.enGoroutine("afficher", t.showWindow)
+	})
+	systray.SetOnDClick(func(systray.IMenu) {
+		log.Printf("[tray] ICÔNE double-clic  %s", t.etat())
+		t.enGoroutine("afficher", t.showWindow)
+	})
 
-	t.rebuildMenu()
-	t.refresh()
+	// Le clic droit n'est pas intercepté : la librairie ouvre le menu elle-même.
+	// Reprendre cette responsabilité s'était soldé par un gel immédiat.
 
+	t.buildMenu()
+
+	// Le premier rafraîchissement part dans la boucle, pas ici : onReady
+	// s'exécute sur le fil de la barre système, avant que sa boucle de messages
+	// ne démarre. Y faire un accès base de données retarderait sa mise en service.
 	go t.loop()
 }
 
-// loop entretient l'icône et le menu.
+// buildMenu crée les entrées de menu, une fois pour toutes (§2.10).
+//
+// Cinq emplacements de tâches, puis « Quitter ». Leur nombre ne change jamais :
+// seul leur libellé est réécrit, et uniquement quand il diffère.
+func (t *tray) buildMenu() {
+	for i := 0; i < trayTopN; i++ {
+		item := systray.AddMenuItem(placeholderVide, "")
+		t.libelles[i] = placeholderVide
+		index := i
+		item.Click(func() { t.enGoroutine("ouvrir tâche", func() { t.openSlot(index) }) })
+		t.slots = append(t.slots, item)
+	}
+
+	systray.AddSeparator()
+
+	quitter := systray.AddMenuItem("Quitter", "Fermer Tout Doux")
+	quitter.Click(func() { t.enGoroutine("quitter", t.quitApp) })
+}
+
+// loop entretient l'icône, l'infobulle et les libellés du menu.
 //
 // Un seul fil pilote la barre système : les deux tickers y sont multiplexés
 // plutôt que lancés séparément, ce qui évite d'avoir à synchroniser deux
 // goroutines qui écriraient l'icône en même temps.
 func (t *tray) loop() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[tray] PANIQUE dans la boucle : %v", r)
+		}
+	}()
+
 	refresh := time.NewTicker(trayRefresh)
 	blink := time.NewTicker(trayBlink)
 	defer refresh.Stop()
 	defer blink.Stop()
+
+	t.refresh() // premier cycle immédiat
 
 	for {
 		select {
@@ -117,20 +189,55 @@ func (t *tray) refresh() {
 	if err != nil {
 		// Une lecture qui échoue ne doit pas tuer la boucle : l'icône reste
 		// telle quelle et le prochain cycle réessaiera.
+		log.Printf("[tray] CYCLE lecture des tâches impossible : %v", err)
 		return
 	}
 	state := stats.Tray(tasks, t.app.clock.Now())
+	top := stats.TopPriority(tasks, trayTopN)
 
 	t.mu.Lock()
+	t.cycles++
 	t.state = state
-	t.tasks = tasks
+	t.slotTasks = top
 	t.inverted = false
 	t.mu.Unlock()
 
 	systray.SetIcon(TrayIcon(iconFor(state.Level)))
 	systray.SetTooltip(tooltip(state))
-	t.rebuildMenu()
+	t.majLibelles(top)
 	t.notifyUrgent(state)
+}
+
+// majLibelles réécrit les entrées de menu dont le texte a changé (§2.10).
+//
+// La comparaison au texte courant n'est pas une optimisation : écrire dans le
+// menu Windows est l'opération la plus délicate de ce fichier, et sur une liste
+// de tâches stable elle devient presque toujours inutile. Moins on y touche,
+// moins on s'expose.
+func (t *tray) majLibelles(top []domain.Task) {
+	for i, item := range t.slots {
+		voulu := placeholderVide
+		if i < len(top) {
+			voulu = t.libelle(top[i])
+		}
+		if t.libelles[i] == voulu {
+			continue
+		}
+		t.libelles[i] = voulu
+		item.SetTitle(voulu)
+	}
+}
+
+// libelle rend une entrée de menu « [Projet] Nom (dans 30 min) » (§2.10).
+func (t *tray) libelle(task domain.Task) string {
+	projet := ""
+	if p, err := t.app.projects.Get(task.ProjectID); err == nil {
+		projet = "[" + p.Name + "] "
+	}
+	if info := duedate.Format(task.DueDate, t.app.clock.Now()); info != nil {
+		return fmt.Sprintf("%s%s (%s)", projet, task.Name, info.Text)
+	}
+	return projet + task.Name
 }
 
 // tick fait avancer le clignotement d'une demi-période (§2.10).
@@ -150,67 +257,12 @@ func (t *tray) tick() {
 
 	if inverse {
 		systray.SetIcon(TrayIcon(TrayClock))
-	} else {
-		systray.SetIcon(TrayIcon(iconFor(niveau)))
+		return
 	}
+	systray.SetIcon(TrayIcon(iconFor(niveau)))
 }
 
-// rebuildMenu reconstruit le menu contextuel (§2.10).
-//
-// systray n'offre pas de mise à jour partielle : on repart d'un menu vide à
-// chaque cycle. C'est acceptable à ce rythme, et bien plus simple que de tenir
-// à jour une correspondance entre entrées de menu et tâches.
-func (t *tray) rebuildMenu() {
-	t.mu.Lock()
-	state, tasks := t.state, t.tasks
-	t.mu.Unlock()
-
-	systray.ResetMenu()
-
-	top := stats.TopPriority(tasks, trayTopN)
-	if len(top) == 0 {
-		vide := systray.AddMenuItem("Aucune tâche prioritaire", "")
-		vide.Disable()
-	}
-	for _, task := range top {
-		task := task // capture par valeur : sans cela, tous les clics ouvriraient la dernière
-		item := systray.AddMenuItem(t.libelle(task), task.Name)
-		item.Click(func() { t.openTask(task) })
-	}
-
-	systray.AddSeparator()
-
-	critiques := systray.AddMenuItem(fmt.Sprintf("Tâches Critiques (%d)", state.CriticalCount), "")
-	critiques.Disable()
-	hautes := systray.AddMenuItem(fmt.Sprintf("Tâches Hautes (%d)", state.HighCount), "")
-	hautes.Disable()
-
-	systray.AddSeparator()
-
-	afficher := systray.AddMenuItem("Afficher", "Afficher la fenêtre")
-	afficher.Click(func() { t.showWindow() })
-
-	t.quit = systray.AddMenuItem("Quitter", "Fermer Tout Doux")
-	t.quit.Click(func() {
-		// Seule sortie de l'application : le bouton X ne fait que masquer la
-		// fenêtre (§2.10). Sans cette entrée, le processus serait impossible à
-		// arrêter depuis l'interface.
-		wailsruntime.Quit(t.app.ctx)
-	})
-}
-
-// libelle rend une entrée de menu « [Projet] Nom (dans 30 min) » (§2.10).
-func (t *tray) libelle(task domain.Task) string {
-	projet := ""
-	if p, err := t.app.projects.Get(task.ProjectID); err == nil {
-		projet = "[" + p.Name + "] "
-	}
-	if info := duedate.Format(task.DueDate, t.app.clock.Now()); info != nil {
-		return fmt.Sprintf("%s%s (%s)", projet, task.Name, info.Text)
-	}
-	return projet + task.Name
-}
-
+// tooltip rend le texte de l'infobulle, avec les compteurs du §2.10.
 func tooltip(s stats.TrayState) string {
 	if s.CriticalCount == 0 && s.HighCount == 0 {
 		return "Tout Doux"
@@ -272,36 +324,75 @@ func (t *tray) notifyUrgent(state stats.TrayState) {
 	}
 }
 
+/* ---- Actions déclenchées par un clic ----
+
+Toutes s'exécutent en goroutine, jamais dans la boucle de messages du tray :
+les gestionnaires de la librairie sont appelés de façon synchrone depuis la
+procédure de fenêtre, et un appel bloquant y figerait l'icône. */
+
+// enGoroutine exécute une action hors de la boucle de messages, en journalisant
+// son entrée et sa sortie.
+//
+// Un « début » sans « fin » dans le journal désigne l'appel qui bloque.
+func (t *tray) enGoroutine(nom string, action func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[tray] PANIQUE dans %s : %v", nom, r)
+			}
+		}()
+		log.Printf("[tray] %s : début", nom)
+		action()
+		log.Printf("[tray] %s : fin", nom)
+	}()
+}
+
+// showWindow ramène la fenêtre au premier plan (§2.10).
+//
+// WindowUnminimise en plus de WindowShow : la fenêtre peut être réduite dans la
+// barre des tâches, et l'afficher sans la restaurer ne ferait rien de visible.
 func (t *tray) showWindow() {
 	if t.app.ctx == nil {
 		return
 	}
+	wailsruntime.WindowUnminimise(t.app.ctx)
 	wailsruntime.WindowShow(t.app.ctx)
 }
 
-// toggleWindow affiche ou masque la fenêtre selon son état courant (§2.10).
-func (t *tray) toggleWindow() {
+func (t *tray) quitApp() {
 	if t.app.ctx == nil {
 		return
 	}
-	if wailsruntime.WindowIsMinimised(t.app.ctx) || !wailsruntime.WindowIsNormal(t.app.ctx) {
-		wailsruntime.WindowShow(t.app.ctx)
-		return
-	}
-	wailsruntime.WindowHide(t.app.ctx)
+	wailsruntime.Quit(t.app.ctx)
 }
 
-// openTask affiche la fenêtre et demande au frontend d'ouvrir la tâche (§2.10).
+// openSlot ramène la fenêtre et demande au frontend d'ouvrir la tâche de
+// l'emplacement de menu cliqué (§2.10).
 //
-// Le backend ne sait pas naviguer : il émet un événement, et React fait le reste
-// avec le même chemin que le double-clic depuis Priorités ou la Recherche.
-func (t *tray) openTask(task domain.Task) {
-	if t.app.ctx == nil {
+// La tâche est relue au moment du clic, et non capturée à la construction du
+// menu : les entrées sont permanentes, leur contenu change à chaque cycle.
+func (t *tray) openSlot(index int) {
+	t.mu.Lock()
+	var task domain.Task
+	if index < len(t.slotTasks) {
+		task = t.slotTasks[index]
+	}
+	t.mu.Unlock()
+
+	if task.ID == "" || t.app.ctx == nil {
 		return
 	}
-	wailsruntime.WindowShow(t.app.ctx)
+	t.showWindow()
 	wailsruntime.EventsEmit(t.app.ctx, "open-task", map[string]string{
 		"projectId": task.ProjectID,
 		"taskId":    task.ID,
 	})
+}
+
+// etat rend un résumé compact joint à chaque ligne de journal.
+func (t *tray) etat() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return fmt.Sprintf("[niveau=%s clignote=%v cycles=%d]",
+		t.state.Level, t.state.Blinking, t.cycles)
 }

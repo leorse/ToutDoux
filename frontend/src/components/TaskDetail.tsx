@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { domain, duedate } from '../../wailsjs/go/models'
 import { useAutosave } from '../useAutosave'
+import { SemanticButton } from './SemanticButton'
 
 const IMPORTANCES = ['Basse', 'Normale', 'Haute', 'Critique'] as const
 type Importance = (typeof IMPORTANCES)[number]
@@ -169,6 +170,10 @@ export function TaskDetail({ task, due, readOnly, onPatch, onQuickDue, onSetDue 
           className="min-h-24 flex-1 resize-none rounded border border-neutral-300 px-2 py-1 text-sm read-only:bg-neutral-50"
         />
       </label>
+
+      {/* Opt-in sémantique (§2.12). La clé force la relecture de l'état au
+          changement de tâche, sinon le bouton garderait celui de la précédente. */}
+      <SemanticButton key={task.id} entityType="task" entityId={task.id} />
     </div>
   )
 }

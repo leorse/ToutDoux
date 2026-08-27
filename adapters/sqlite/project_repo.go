@@ -111,6 +111,10 @@ func (r *ProjectRepository) Delete(id string) error {
 		{`DELETE FROM tasks WHERE project_id = ?`, []any{id}},
 		{`DELETE FROM images WHERE project_id = ?`, []any{id}},
 		{`DELETE FROM search_index WHERE project_id = ?`, []any{id}},
+		// L'index sémantique porte une clé étrangère sur le projet : sans cette
+		// ligne, la suppression échouerait sur une violation de contrainte dès
+		// qu'une seule entité du projet aurait été vectorisée (§3.2).
+		{`DELETE FROM embeddings WHERE project_id = ?`, []any{id}},
 	}
 	for _, s := range statements {
 		if _, err := tx.Exec(s.query, s.args...); err != nil {

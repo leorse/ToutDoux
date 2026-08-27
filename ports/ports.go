@@ -121,3 +121,66 @@ type SearchIndex interface {
 	// d'affichage est une règle du domaine (§2.9).
 	Search(query string) ([]domain.IndexEntry, error)
 }
+
+// EmbeddingProvider transforme un texte en vecteur de sens (§2.12).
+//
+// C'est le second critère du §3.9 — un besoin de test réel, autrement pénible.
+// Sans ce port, tester la moindre règle touchant à la recherche sémantique
+// imposerait de charger un modèle de 120 Mo à *chaque* `go test` : la suite
+// passerait de moins d'une seconde à plusieurs dizaines.
+//
+// Deux implémentations : celle qui appelle ONNX, et FakeEmbeddingProvider, qui
+// rend un vecteur déterministe dérivé du texte. Le Fake couvre tout ce qui
+// entoure le modèle — opt-in, revectorisation, non-recalcul, tri par score. Ce
+// qu'il ne couvre pas, et ne prétend pas couvrir, c'est la qualité sémantique
+// du vrai modèle (§3.10).
+type EmbeddingProvider interface {
+	// Embed rend le vecteur d'un texte **indexé**, ou
+	// domain.ErrModelUnavailable si le modèle n'est pas déposé — ce qui est un
+	// état normal, pas une panne.
+	Embed(text string) ([]float32, error)
+
+	// EmbedQuery rend le vecteur d'une **requête**.
+	//
+	// La distinction n'est pas cosmétique : la famille e5 est entraînée avec
+	// deux préfixes, « query: » et « passage: », et les mélanger dégrade
+	// nettement la pertinence. Le port porte donc les deux rôles plutôt que de
+	// laisser l'appelant fabriquer un préfixe qui dépend du modèle choisi.
+	EmbedQuery(text string) ([]float32, error)
+
+	// Available indique si une vectorisation est possible dès maintenant.
+	//
+	// Elle existe pour éviter le coût d'un chargement de modèle quand on veut
+	// seulement savoir si le bouton « Ajouter à la recherche sémantique » doit
+	// être actif.
+	Available() bool
+}
+
+// EmbeddingRepository persiste l'index sémantique (§3.2, table `embeddings`).
+//
+// Même statut que les autres repositories : le domaine énonce ce dont il a
+// besoin, l'adaptateur SQLite s'y conforme. La sérialisation du vecteur en BLOB
+// ne remonte jamais jusqu'ici.
+type EmbeddingRepository interface {
+	// Put insère ou remplace le vecteur d'une entité.
+	Put(e domain.Embedding) error
+
+	// Get rend le vecteur d'une entité, ou domain.ErrNotFound.
+	Get(entityID string) (domain.Embedding, error)
+
+	// Delete retire une entité de l'index sémantique, sans erreur si elle n'y
+	// figurait pas.
+	Delete(entityID string) error
+
+	// DeleteByProject accompagne la suppression en cascade d'un projet (§2.1).
+	DeleteByProject(projectID string) error
+
+	// List rend tout l'index. La recherche balaie l'ensemble : le §3.2 assume
+	// ce choix, quelques milliers de vecteurs se comparent en moins d'une
+	// milliseconde et évitent une extension vectorielle native.
+	List() ([]domain.Embedding, error)
+
+	// Count rend le nombre d'entités indexées, pour distinguer « aucun
+	// résultat » d'« index vide » (§2.12).
+	Count() (int, error)
+}

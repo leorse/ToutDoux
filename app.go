@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"github.com/google/uuid"
 
 	"toutdoux/adapters"
+	"toutdoux/adapters/model"
+	"toutdoux/adapters/onnx"
 	"toutdoux/adapters/sqlite"
 	"toutdoux/domain"
 	"toutdoux/domain/cascade"
@@ -37,6 +40,24 @@ type App struct {
 	index    ports.SearchIndex
 	clock    ports.Clock
 
+	// Recherche sémantique (§2.12). Optionnelle : sans modèle déposé, embedder
+	// répond « indisponible » et le reste de l'application fonctionne
+	// exactement comme avant.
+	embeddings ports.EmbeddingRepository
+	embedder   ports.EmbeddingProvider
+
+	// modelDir est le dossier où l'utilisateur dépose le modèle (§3.3).
+	modelDir string
+
+	// enArrierePlan exécute une tâche hors du chemin de réponse.
+	//
+	// C'est un champ et non un `go` en dur pour une raison de test : une
+	// revectorisation lancée en goroutine est impossible à observer de façon
+	// déterministe, et un test qui attend « un peu » est un test qui échouera
+	// un jour sur une machine chargée. Les tests remplacent ce champ par une
+	// exécution synchrone.
+	enArrierePlan func(func())
+
 	// tray est nil dans les tests : la barre système est un adaptateur pilote,
 	// pas une dépendance du métier.
 	tray *tray
@@ -44,7 +65,7 @@ type App struct {
 
 // NewApp construit l'application avec ses dépendances par défaut.
 func NewApp() *App {
-	return &App{clock: adapters.SystemClock{}}
+	return &App{clock: adapters.SystemClock{}, enArrierePlan: func(f func()) { go f() }}
 }
 
 // newAppWithDB câble l'application sur une base déjà ouverte et une horloge
@@ -55,13 +76,20 @@ func NewApp() *App {
 // ni dépendre de l'heure réelle.
 func newAppWithDB(db *sqlite.DB, clock ports.Clock) *App {
 	return &App{
-		db:       db,
-		projects: sqlite.NewProjectRepository(db),
-		tasks:    sqlite.NewTaskRepository(db),
-		notes:    sqlite.NewNoteRepository(db),
-		meetings: sqlite.NewMeetingRepository(db),
-		index:    sqlite.NewSearchIndexAdapter(db),
+		db:         db,
+		projects:   sqlite.NewProjectRepository(db),
+		tasks:      sqlite.NewTaskRepository(db),
+		notes:      sqlite.NewNoteRepository(db),
+		meetings:   sqlite.NewMeetingRepository(db),
+		index:      sqlite.NewSearchIndexAdapter(db),
+		embeddings: sqlite.NewEmbeddingRepository(db),
+		// Fournisseur factice par défaut : aucun test ne doit charger un modèle
+		// de 120 Mo (§3.9). Les tests qui veulent observer les appels gardent
+		// une référence sur celui qu'ils injectent.
+		embedder: adapters.NewFakeEmbeddingProvider(),
 		clock:    clock,
+		// Exécution synchrone : voir le commentaire du champ.
+		enArrierePlan: func(f func()) { f() },
 	}
 }
 
@@ -88,12 +116,36 @@ func (a *App) startup(ctx context.Context) {
 	a.notes = sqlite.NewNoteRepository(db)
 	a.meetings = sqlite.NewMeetingRepository(db)
 	a.index = sqlite.NewSearchIndexAdapter(db)
+	a.embeddings = sqlite.NewEmbeddingRepository(db)
+
+	// Recherche sémantique (§2.12). Le dossier du modèle est voisin de la base,
+	// dans les données utilisateur : l'emplacement de l'exécutable peut ne pas
+	// être inscriptible (§3.3).
+	//
+	// Le dossier est créé vide s'il n'existe pas. C'est le seul geste que
+	// l'application fait pour le modèle : elle ne télécharge rien, jamais (§6).
+	// Mais un dossier qui existe est un dossier qu'on peut ouvrir depuis
+	// l'explorateur pour y déposer les fichiers, sans avoir à le créer soi-même
+	// avec le bon nom.
+	a.modelDir = model.Dir(path)
+	if err := os.MkdirAll(a.modelDir, 0o755); err != nil {
+		log.Printf("[semantique] dossier des modeles indisponible : %v", err)
+	}
+	// Le fournisseur ne lit rien à la construction : le modèle n'est chargé
+	// qu'à la première vectorisation réelle (§3.8).
+	a.embedder = onnx.NewProvider(a.modelDir)
 
 	// L'index est reconstruit au démarrage : il peut avoir divergé si
 	// l'application s'est arrêtée entre une écriture et son indexation, et il
 	// est vide pour une base créée avant l'arrivée de la recherche.
+	//
+	// Un échec ici n'est PAS fatal, contrairement à l'ouverture de la base.
+	// L'index n'est qu'un cache : sans lui la recherche rend moins de résultats,
+	// mais projets, tâches et notes restent parfaitement utilisables. Faire
+	// paniquer l'application pour un cache tuait le processus au démarrage, sans
+	// autre symptôme visible qu'une fenêtre qui ne s'ouvre jamais.
 	if err := a.reindexAll(); err != nil {
-		panic(fmt.Sprintf("reconstruction de l'index : %v", err))
+		log.Printf("[index] reconstruction impossible, la recherche sera incomplète : %v", err)
 	}
 
 	// Barre système (§2.10). Démarrée après la base : le menu lit les tâches
@@ -104,6 +156,13 @@ func (a *App) startup(ctx context.Context) {
 // shutdown ferme proprement la base.
 func (a *App) shutdown(ctx context.Context) {
 	a.stopTray()
+
+	// Le fournisseur de vecteurs tient une session ONNX et une bibliothèque
+	// native chargée. L'interface optionnelle évite de faire connaître à App
+	// l'adaptateur concret : les fournisseurs factices n'ont rien à libérer.
+	if c, ok := a.embedder.(interface{ Close() }); ok {
+		c.Close()
+	}
 	if a.db != nil {
 		a.db.Close()
 	}
@@ -456,6 +515,10 @@ func (a *App) UpdateTask(taskID string, patch TaskPatch) (domain.Task, error) {
 	if err := a.indexTask(task); err != nil {
 		return domain.Task{}, err
 	}
+	// Revectorisation en arrière-plan si la tâche est dans l'index sémantique
+	// (§2.12). Un patch qui ne touche qu'à l'importance ou à l'échéance ne
+	// déclenche aucun calcul : l'empreinte du texte est inchangée.
+	a.rafraichirEnArrierePlan(taskID)
 	return a.tasks.Get(taskID)
 }
 
@@ -596,6 +659,11 @@ func (a *App) DeleteTask(taskID string) error {
 		if err := a.index.Delete(id); err != nil {
 			return err
 		}
+		// Un vecteur orphelin resterait dans l'index sémantique et ferait
+		// remonter un résultat qu'on ne peut plus ouvrir (§2.12).
+		if err := a.embeddings.Delete(id); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -644,12 +712,18 @@ func (a *App) UpdateNote(noteID, title, content string) (domain.Note, error) {
 	if err != nil {
 		return domain.Note{}, err
 	}
+	// Revectorisation en arrière-plan si la note est dans l'index sémantique
+	// (§2.12). Sans effet sinon : l'opt-in est strict.
+	a.rafraichirEnArrierePlan(noteID)
 	return maj, a.indexNote(maj)
 }
 
 // DeleteNote supprime une note.
 func (a *App) DeleteNote(noteID string) error {
 	if err := a.notes.Delete(noteID); err != nil {
+		return err
+	}
+	if err := a.embeddings.Delete(noteID); err != nil {
 		return err
 	}
 	return a.index.Delete(noteID)

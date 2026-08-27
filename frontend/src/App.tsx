@@ -2,15 +2,17 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, onEvent } from './api'
 import type { domain } from '../wailsjs/go/models'
 import { MeetingsTab } from './components/MeetingsTab'
+import { ModelMissingDialog } from './components/ModelMissingDialog'
 import { NotesTab } from './components/NotesTab'
+import { PreferencesView } from './components/PreferencesView'
 import { PrioritiesView } from './components/PrioritiesView'
 import { ProjectSidebar } from './components/ProjectSidebar'
 import { SearchView, type CibleOuverture } from './components/SearchView'
 import { Split } from './components/Split'
 import { FILTRES_PAR_DEFAUT, TasksTab, type Filtres } from './components/TasksTab'
 
-/** Vues de premier niveau (§2.11). */
-type View = 'projects' | 'priorities'
+/** Vues de premier niveau (§2.11, §2.13). */
+type View = 'projects' | 'priorities' | 'preferences'
 
 /** Sous-onglets de la vue Projets (§2.11). */
 type Tab = 'tasks' | 'notes' | 'meetings'
@@ -26,6 +28,12 @@ export default function App() {
   const [view, setView] = useState<View>('projects')
   const [tab, setTab] = useState<Tab>('tasks')
   const [query, setQuery] = useState('')
+
+  // Bascule 🧠 de la bande transverse (§2.12). Décochée par défaut : la
+  // recherche mot-clé reste le mode normal, plus rapide et plus précis quand on
+  // sait quel mot on cherche.
+  const [semantique, setSemantique] = useState(false)
+  const [modeleAbsent, setModeleAbsent] = useState(false)
   const [projects, setProjects] = useState<domain.Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -79,6 +87,24 @@ export default function App() {
    * peuvent ouvrir y vit —, sélectionne le projet et l'onglet natif de
    * l'élément, puis transmet la cible à l'onglet concerné.
    */
+  /**
+   * Active ou désactive le mode sémantique (§2.12).
+   *
+   * L'activation vérifie le modèle : sans lui, la bascule ne s'active pas et la
+   * fenêtre explicative s'ouvre. Basculer d'abord pour n'afficher ensuite qu'une
+   * erreur laisserait l'interface dans un mode qui ne peut rien rendre.
+   */
+  const basculerSemantique = useCallback(() => {
+    if (semantique) {
+      setSemantique(false)
+      return
+    }
+    api
+      .GetSemanticStatus()
+      .then((s) => (s.modelAvailable ? setSemantique(true) : setModeleAbsent(true)))
+      .catch(() => setModeleAbsent(true))
+  }, [semantique])
+
   const ouvrir = useCallback((c: CibleOuverture) => {
     setQuery('')
     setView('projects')
@@ -123,7 +149,15 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-white text-neutral-900">
-      <TransverseBar view={view} onView={setView} query={query} onQuery={setQuery} searching={searching} />
+      <TransverseBar
+        view={view}
+        onView={setView}
+        query={query}
+        onQuery={setQuery}
+        searching={searching}
+        semantique={semantique}
+        onSemantique={basculerSemantique}
+      />
 
       {error ? (
         <p role="alert" className="border-b border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
@@ -133,7 +167,14 @@ export default function App() {
 
       <main className="min-h-0 flex-1">
         {searching ? (
-          <SearchView query={query} onClose={() => setQuery('')} onOpen={ouvrir} />
+          <SearchView
+            query={query}
+            semantique={semantique}
+            onClose={() => setQuery('')}
+            onOpen={ouvrir}
+          />
+        ) : view === 'preferences' ? (
+          <PreferencesView />
         ) : view === 'priorities' ? (
           <PrioritiesView projects={projects} onOpenTask={ouvrirTache} />
         ) : (
@@ -166,6 +207,18 @@ export default function App() {
           />
         )}
       </main>
+
+      {modeleAbsent ? (
+        <ModelMissingDialog
+          onClose={() => setModeleAbsent(false)}
+          onAvailable={() => {
+            // Le modèle vient d'apparaître : on referme et on bascule, puisque
+            // c'est très exactement ce que l'utilisateur demandait.
+            setModeleAbsent(false)
+            setSemantique(true)
+          }}
+        />
+      ) : null}
     </div>
   )
 }
@@ -181,12 +234,16 @@ function TransverseBar({
   query,
   onQuery,
   searching,
+  semantique,
+  onSemantique,
 }: {
   view: View
   onView: (v: View) => void
   query: string
   onQuery: (q: string) => void
   searching: boolean
+  semantique: boolean
+  onSemantique: () => void
 }) {
   return (
     <div className="flex items-center gap-4 border-b border-neutral-300 px-3 py-2">
@@ -225,6 +282,42 @@ function TransverseBar({
         {query && !searching ? (
           <span className="shrink-0 text-xs text-neutral-500">3 caractères minimum</span>
         ) : null}
+
+        {/* Bascule sémantique, à droite de la barre (§2.11, §2.12). */}
+        <button
+          type="button"
+          onClick={onSemantique}
+          aria-pressed={semantique}
+          aria-label="Recherche sémantique"
+          title={
+            semantique
+              ? 'Recherche sémantique active : les résultats sont triés par proximité de sens'
+              : 'Recherche sémantique : retrouve un contenu reformulé, tolère les fautes de frappe'
+          }
+          className={`shrink-0 rounded border px-2 py-1 text-sm ${
+            semantique
+              ? 'border-[var(--color-selection)] bg-[var(--color-selection)] text-white'
+              : 'border-neutral-300 hover:bg-neutral-100'
+          }`}
+        >
+          🧠
+        </button>
+
+        {/* Préférences, à droite de la recherche (§2.11, §2.13). */}
+        <button
+          type="button"
+          onClick={() => onView(view === 'preferences' ? 'projects' : 'preferences')}
+          aria-pressed={view === 'preferences'}
+          aria-label="Préférences"
+          title="Préférences"
+          className={`shrink-0 rounded border px-2 py-1 text-sm ${
+            view === 'preferences'
+              ? 'border-[var(--color-selection)] bg-[var(--color-selection)] text-white'
+              : 'border-neutral-300 hover:bg-neutral-100'
+          }`}
+        >
+          ⚙️
+        </button>
       </div>
     </div>
   )

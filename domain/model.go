@@ -145,3 +145,20 @@ type MeetingInstance struct {
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
+
+// Embedding est le vecteur de sens d'une entité ajoutée à l'index sémantique
+// (§2.12, §3.2).
+//
+// SourceHash est l'empreinte du texte réellement vectorisé : c'est lui qui
+// permet de ne rien recalculer quand la sauvegarde automatique réenregistre un
+// texte inchangé. Dimensions accompagne le vecteur pour refuser de comparer
+// deux vecteurs produits par des modèles différents.
+type Embedding struct {
+	EntityID   string     `json:"entityId"`
+	Type       SearchType `json:"type"`
+	ProjectID  string     `json:"projectId"`
+	Vector     []float32  `json:"vector"`
+	Dimensions int        `json:"dimensions"`
+	SourceHash string     `json:"sourceHash"`
+	UpdatedAt  time.Time  `json:"updatedAt"`
+}

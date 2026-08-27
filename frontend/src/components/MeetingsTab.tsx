@@ -4,6 +4,7 @@ import type { domain } from '../../wailsjs/go/models'
 import { useAutosave } from '../useAutosave'
 import { ContextMenu, type MenuState } from './ContextMenu'
 import { RichEditor } from './RichEditor'
+import { SemanticButton } from './SemanticButton'
 import { Split } from './Split'
 
 /**
@@ -254,9 +255,16 @@ export function MeetingsTab({
                       onBlur={save.flush}
                     />
                   </div>
-                  <p aria-live="polite" className="border-t border-neutral-300 px-3 py-1 text-xs text-neutral-500">
-                    {statut}
-                  </p>
+                  <div className="flex items-center gap-3 border-t border-neutral-300 px-3 py-1">
+                    <p aria-live="polite" className="text-xs text-neutral-500">
+                      {statut}
+                    </p>
+                    {/* Opt-in sémantique sur l'instance, pas sur la réunion :
+                        c'est l'instance qui porte le compte rendu (§2.12). */}
+                    <span className="ml-auto">
+                      <SemanticButton key={instance.id} entityType="meeting" entityId={instance.id} />
+                    </span>
+                  </div>
                 </div>
               ) : (
                 <p className="p-4 text-sm text-neutral-500">Aucune instance sélectionnée.</p>

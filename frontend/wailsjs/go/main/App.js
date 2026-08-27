@@ -6,6 +6,10 @@ export function AddMeetingInstance(arg1) {
   return window['go']['main']['App']['AddMeetingInstance'](arg1);
 }
 
+export function AddToSemanticIndex(arg1, arg2) {
+  return window['go']['main']['App']['AddToSemanticIndex'](arg1, arg2);
+}
+
 export function CreateMeeting(arg1, arg2) {
   return window['go']['main']['App']['CreateMeeting'](arg1, arg2);
 }
@@ -54,12 +58,20 @@ export function GetMeetings(arg1) {
   return window['go']['main']['App']['GetMeetings'](arg1);
 }
 
+export function GetModelStatus() {
+  return window['go']['main']['App']['GetModelStatus']();
+}
+
 export function GetNotes(arg1) {
   return window['go']['main']['App']['GetNotes'](arg1);
 }
 
 export function GetPriorityTasks() {
   return window['go']['main']['App']['GetPriorityTasks']();
+}
+
+export function GetSemanticStatus() {
+  return window['go']['main']['App']['GetSemanticStatus']();
 }
 
 export function GetSidebarStats(arg1) {
@@ -74,6 +86,10 @@ export function GetTasks(arg1) {
   return window['go']['main']['App']['GetTasks'](arg1);
 }
 
+export function IsInSemanticIndex(arg1) {
+  return window['go']['main']['App']['IsInSemanticIndex'](arg1);
+}
+
 export function ListProjects() {
   return window['go']['main']['App']['ListProjects']();
 }
@@ -84,6 +100,14 @@ export function MoveTask(arg1, arg2) {
 
 export function ProjectDeletionSummary(arg1) {
   return window['go']['main']['App']['ProjectDeletionSummary'](arg1);
+}
+
+export function RefreshEmbedding(arg1) {
+  return window['go']['main']['App']['RefreshEmbedding'](arg1);
+}
+
+export function RemoveFromSemanticIndex(arg1) {
+  return window['go']['main']['App']['RemoveFromSemanticIndex'](arg1);
 }
 
 export function RenameMeeting(arg1, arg2) {
@@ -100,6 +124,10 @@ export function ReparentTask(arg1, arg2) {
 
 export function SearchGlobal(arg1) {
   return window['go']['main']['App']['SearchGlobal'](arg1);
+}
+
+export function SearchSemantic(arg1) {
+  return window['go']['main']['App']['SearchSemantic'](arg1);
 }
 
 export function SetTaskDueDateQuick(arg1, arg2) {

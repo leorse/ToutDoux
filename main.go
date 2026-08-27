@@ -25,15 +25,25 @@ func main() {
 		MinWidth:  900,
 		MinHeight: 600,
 
-		// Le X cache la fenêtre au lieu de quitter : l'application continue en
-		// arrière-plan (§2.10).
+		// Le bouton X ferme réellement l'application. Réduire la fenêtre la
+		// laisse dans la barre des tâches, comme n'importe quelle application.
 		//
-		// Ce drapeau est indissociable de l'entrée « Quitter » du menu de la
-		// barre système, qui est la seule sortie de l'application. Si le tray
-		// venait à être retiré, celui-ci devrait repasser à false dans le même
-		// mouvement — sinon la fenêtre se ferme sur un processus invisible et
-		// impossible à arrêter, et `wails dev` ne rend jamais la main.
-		HideWindowOnClose: true,
+		// C'est un écart assumé au §2.10, qui prévoyait que le X masque la
+		// fenêtre et laisse l'application vivre en arrière-plan. Ce comportement
+		// a été essayé et retiré : il impose de suivre l'état d'affichage d'une
+		// fenêtre que Wails masque sans prévenir, et toutes les variantes
+		// tentées ont fini par figer l'icône de la barre système ou par empêcher
+		// l'application de s'arrêter.
+		//
+		// **Ne pas le réintroduire par un hook OnBeforeClose.** Wails consulte
+		// OnBeforeClose depuis Quit() :
+		//
+		//	if OnBeforeClose != nil && OnBeforeClose(ctx) { return }
+		//
+		// Un hook qui renvoie « empêcher la fermeture » annule donc aussi les
+		// arrêts volontaires : ni « Quitter », ni le Ctrl+C de `wails dev` ne
+		// terminent plus le processus.
+		HideWindowOnClose: false,
 
 		AssetServer:      &assetserver.Options{Assets: assets},
 		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 1},

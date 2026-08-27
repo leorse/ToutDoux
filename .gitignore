@@ -99,3 +99,11 @@ desktop.ini
 .env
 .env.*
 !.env.example
+
+# Bibliothèque d'exécution ONNX (§3.5, §5.9).
+#
+# 16 Mo de binaire, versionné avec `onnxruntime_go` et non avec ce dépôt : il se
+# récupère depuis le cache du module Go ou depuis les releases officielles. Le
+# fournisseur la cherche à côté de l'exécutable, puis ici, puis dans le dossier
+# des modèles — d'où le risque qu'une copie traîne à la racine.
+onnxruntime.dll

@@ -26,3 +26,11 @@ var (
 	// ErrEmptyName : nom vide ou composé uniquement d'espaces.
 	ErrEmptyName = errors.New("le nom ne peut pas être vide")
 )
+
+// ErrModelUnavailable : le modèle sémantique n'est pas déposé, ou n'a pas pu
+// être chargé (§2.12).
+//
+// L'application ne le télécharge jamais : c'est à l'utilisateur de le déposer.
+// Cette erreur est donc un état normal du produit, pas une panne — l'interface
+// la traduit en fenêtre explicative avec le chemin attendu (§2.13).
+var ErrModelUnavailable = errors.New("le modèle sémantique n'est pas disponible")

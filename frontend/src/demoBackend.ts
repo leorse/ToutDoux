@@ -61,9 +61,20 @@ const donneesInitiales = () => ({
 
 let { projects, tasks, notes, meetings, instances } = donneesInitiales()
 
+/**
+ * Index sémantique de démonstration (§2.12).
+ *
+ * Il conserve l'opt-in strict du vrai backend — rien n'y entre sans appel
+ * explicite — parce que c'est justement la règle que l'interface doit refléter.
+ * Le « modèle » est ici toujours disponible : hors de Wails il n'y a pas de
+ * fichier à détecter, et refuser la fonctionnalité rendrait la vue intestable.
+ */
+let indexSemantique = new Set<string>()
+
 /** Restaure le jeu de démonstration. Appelé entre deux tests. */
 export function resetDemoData(): void {
   ;({ projects, tasks, notes, meetings, instances } = donneesInitiales())
+  indexSemantique = new Set<string>()
 }
 
 function t(
@@ -399,5 +410,104 @@ export const demoBackend = {
   },
   DeleteNote: async (noteId: string) => {
     notes = notes.filter((x) => x.id !== noteId)
+  },
+
+  /* -------- Recherche sémantique (§2.12) et modèle (§2.13) -------- */
+
+  GetModelStatus: async () => ({
+    available: true,
+    directory: 'C:\Users\Demo\AppData\Roaming\ToutDoux\models',
+    expectedFiles: ['model.onnx', 'tokenizer.json', 'sentencepiece.bpe.model'],
+    missingFiles: [],
+    downloadUrl: 'https://huggingface.co/Xenova/multilingual-e5-small/tree/main',
+    files: [
+      { name: 'model.onnx', source: 'onnx/model_int8.onnx', present: true, size: 118_000_000 },
+      { name: 'tokenizer.json', source: 'tokenizer.json', present: true, size: 17_000_000 },
+      { name: 'sentencepiece.bpe.model', source: 'sentencepiece.bpe.model', present: true, size: 5_000_000 },
+    ],
+    runtime: { name: 'onnxruntime.dll', source: 'onnxruntime-win-x64-1.29.0.zip, dans lib/', present: true, size: 16_000_000 },
+  }),
+
+  GetSemanticStatus: async () => ({
+    modelAvailable: true,
+    filesPresent: true,
+    indexedCount: indexSemantique.size,
+  }),
+
+  AddToSemanticIndex: async (_entityType: string, entityId: string) => {
+    indexSemantique.add(entityId)
+  },
+  RemoveFromSemanticIndex: async (entityId: string) => {
+    indexSemantique.delete(entityId)
+  },
+  IsInSemanticIndex: async (entityId: string) => indexSemantique.has(entityId),
+  RefreshEmbedding: async (_entityId: string) => {},
+
+  /**
+   * Recherche sémantique de démonstration.
+   *
+   * Elle ne simule évidemment pas un modèle : elle compte les mots partagés
+   * entre la requête et le texte. Ce qu'elle reproduit fidèlement, et c'est
+   * tout ce que l'interface a besoin de montrer : seules les entités ajoutées
+   * remontent, le tri est par score décroissant, et l'extrait ne porte aucune
+   * surbrillance.
+   */
+  SearchSemantic: async (query: string) => {
+    const mots = query.trim().toLowerCase().split(/\W+/).filter(Boolean)
+    if (query.trim().length < 3) return []
+
+    const nomProjet = (id: string) => projects.find((p) => p.id === id)?.name ?? ''
+    const brut = (texte: string) => texte.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+    const score = (texte: string) => {
+      const cible = brut(texte).toLowerCase()
+      const touches = mots.filter((m) => cible.includes(m)).length
+      return mots.length === 0 ? 0 : touches / mots.length
+    }
+    const extrait = (texte: string) => ({
+      leadingEllipsis: false,
+      parts: [{ text: brut(texte).slice(0, 180), match: false }],
+      trailingEllipsis: brut(texte).length > 180,
+    })
+
+    const out: { id: string; score: number }[] = []
+    const lignes = new Map<string, unknown>()
+
+    for (const t of tasks) {
+      if (!indexSemantique.has(t.id)) continue
+      const s = score(`${t.name} ${t.description}`)
+      if (s <= 0) continue
+      out.push({ id: t.id, score: s })
+      lignes.set(t.id, {
+        type: 'task', id: t.id, title: t.name, projectId: t.projectId,
+        projectName: nomProjet(t.projectId), date: t.dueDate, task: t,
+        snippet: extrait(t.description || t.name), score: s,
+      })
+    }
+    for (const n of notes) {
+      if (!indexSemantique.has(n.id)) continue
+      const s = score(`${n.title} ${n.content}`)
+      if (s <= 0) continue
+      out.push({ id: n.id, score: s })
+      lignes.set(n.id, {
+        type: 'note', id: n.id, title: n.title || 'Sans titre', projectId: n.projectId,
+        projectName: nomProjet(n.projectId), date: n.updatedAt, note: n,
+        snippet: extrait(n.content || n.title), score: s,
+      })
+    }
+    for (const i of instances) {
+      if (!indexSemantique.has(i.id)) continue
+      const reunion = meetings.find((m) => m.id === i.meetingId)
+      if (!reunion) continue
+      const s = score(`${reunion.title} ${i.notes}`)
+      if (s <= 0) continue
+      out.push({ id: i.id, score: s })
+      lignes.set(i.id, {
+        type: 'meeting', id: i.id, title: reunion.title, projectId: reunion.projectId,
+        projectName: nomProjet(reunion.projectId), date: i.timestamp,
+        meeting: reunion, instance: i, snippet: extrait(i.notes), score: s,
+      })
+    }
+
+    return out.sort((a, b) => b.score - a.score).map((x) => lignes.get(x.id)) as never
   },
 }

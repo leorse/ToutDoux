@@ -63,6 +63,12 @@ func (a *App) DeleteMeeting(meetingID string) error {
 		if err := a.index.Delete(i.ID); err != nil {
 			return err
 		}
+		if err := a.embeddings.Delete(i.ID); err != nil {
+			return err
+		}
+	}
+	if err := a.embeddings.Delete(meetingID); err != nil {
+		return err
 	}
 	return a.index.Delete(meetingID)
 }
@@ -104,12 +110,18 @@ func (a *App) UpdateInstanceNotes(instanceID, notes string) (domain.MeetingInsta
 	if err != nil {
 		return domain.MeetingInstance{}, err
 	}
+	// Revectorisation en arrière-plan si l'instance est dans l'index sémantique
+	// (§2.12). Sans effet sinon, et sans effet si le texte n'a pas bougé.
+	a.rafraichirEnArrierePlan(instanceID)
 	return i, a.indexInstance(i)
 }
 
 // DeleteInstance supprime une instance.
 func (a *App) DeleteInstance(instanceID string) error {
 	if err := a.meetings.DeleteInstance(instanceID); err != nil {
+		return err
+	}
+	if err := a.embeddings.Delete(instanceID); err != nil {
 		return err
 	}
 	return a.index.Delete(instanceID)

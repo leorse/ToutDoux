@@ -24,16 +24,20 @@ export type CibleOuverture = {
  */
 export function SearchView({
   query,
+  semantique = false,
   onClose,
   onOpen,
 }: {
   query: string
+  /** Mode sémantique (§2.12), piloté par la bascule 🧠 de la bande transverse. */
+  semantique?: boolean
   onClose: () => void
   onOpen: (cible: CibleOuverture) => void
 }) {
   const [results, setResults] = useState<main.SearchResult[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
+  const [indexVide, setIndexVide] = useState(false)
 
   const selected = results.find((r) => r.id === selectedId) ?? null
 
@@ -41,8 +45,10 @@ export function SearchView({
     // Anti-rebond : sans lui, chaque frappe déclencherait une requête, et les
     // réponses pourraient revenir dans le désordre (§2.9).
     const timer = setTimeout(() => {
-      api
-        .SearchGlobal(query)
+      // Les deux modes ne sont jamais fusionnés : l'utilisateur en choisit un,
+      // et la liste vient d'une seule source (§2.12).
+      const recherche = semantique ? api.SearchSemantic(query) : api.SearchGlobal(query)
+      recherche
         .then((r) => {
           setResults(r)
           setSelectedId((current) => (r.some((x) => x.id === current) ? current : (r[0]?.id ?? null)))
@@ -51,7 +57,21 @@ export function SearchView({
         .catch((err) => setErreur(String(err)))
     }, DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [query])
+  }, [query, semantique])
+
+  // Un index sémantique vide se dit, il ne s'affiche pas comme « aucun
+  // résultat » : la nuance est tout sauf cosmétique, elle sépare « rien ne
+  // correspond » de « rien n'a été indexé » (§2.12).
+  useEffect(() => {
+    if (!semantique) {
+      setIndexVide(false)
+      return
+    }
+    api.GetSemanticStatus().then(
+      (s) => setIndexVide(s.indexedCount === 0),
+      () => setIndexVide(false),
+    )
+  }, [semantique, results])
 
   function ouvrir(r: main.SearchResult) {
     // Chaque type retourne dans son onglet natif ; la bascule vers la vue
@@ -72,6 +92,11 @@ export function SearchView({
         <span className="text-sm text-neutral-700">
           {results.length} résultat{results.length > 1 ? 's' : ''}
         </span>
+        {semantique ? (
+          <span className="rounded bg-[var(--color-selection)] px-1.5 py-0.5 text-xs text-white">
+            🧠 sémantique
+          </span>
+        ) : null}
         <button
           type="button"
           onClick={onClose}
@@ -95,7 +120,11 @@ export function SearchView({
           className="h-full"
           first={
             results.length === 0 ? (
-              <p className="p-4 text-sm text-neutral-500">Aucun résultat.</p>
+              <p className="p-4 text-sm text-neutral-500">
+                {semantique && indexVide
+                  ? 'L’index sémantique est vide. Ajoute des notes, des comptes rendus ou des tâches avec leur bouton 🧠 : seules les entités ajoutées peuvent remonter ici.'
+                  : 'Aucun résultat.'}
+              </p>
             ) : (
               <ul aria-label="Résultats" className="flex flex-col p-1">
                 {results.map((r) => (
@@ -105,6 +134,13 @@ export function SearchView({
                       onClick={() => setSelectedId(r.id)}
                       onDoubleClick={() => ouvrir(r)}
                       aria-current={r.id === selectedId ? 'true' : undefined}
+                      /* La similarité n'est pas affichée en clair.
+                         Mesurée sur ce modèle, elle tient entre 0,79 et 0,88,
+                         y compris pour un document sans aucun rapport : « 83 % »
+                         se lirait comme une quasi-certitude alors que seul
+                         l'écart entre deux lignes veut dire quelque chose. Elle
+                         reste consultable en infobulle. */
+                      title={semantique ? `Similarité ${r.score.toFixed(3)}` : undefined}
                       className={`flex w-full items-center gap-2 rounded border px-2 py-1 text-left text-sm ${
                         r.id === selectedId
                           ? 'border-2 border-[var(--color-selection)] bg-neutral-100'

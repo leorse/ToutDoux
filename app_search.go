@@ -34,6 +34,11 @@ type SearchResult struct {
 	// ProjectName évite au frontend de recroiser la liste des projets pour
 	// afficher le tag de chaque ligne.
 	ProjectName string `json:"projectName"`
+
+	// Score n'est renseigné qu'en recherche sémantique (§2.12) : c'est la
+	// similarité cosinus, entre 0 et 1. En recherche mot-clé il vaut 0, la
+	// pertinence FTS5 n'étant pas exposée à l'utilisateur.
+	Score float64 `json:"score"`
 }
 
 // SearchGlobal cherche dans les tâches, notes et réunions (§2.9).
@@ -63,52 +68,22 @@ func (a *App) SearchGlobal(query string) ([]SearchResult, error) {
 	extraits := make(map[string]*search.Snippet, len(entries))
 
 	for _, e := range entries {
-		r := search.Result{
-			Type:      search.Type(e.Type),
-			ID:        e.EntityID,
-			Title:     e.Title,
-			ProjectID: e.ProjectID,
-			Date:      e.CreatedAt,
-		}
-
 		// L'entité est rattachée au résultat : la ligne d'une tâche affiche son
 		// état coché et sa pastille d'importance, pas un simple ✓ (§2.9).
-		switch e.Type {
-		case domain.SearchTypeTask:
-			t, err := a.tasks.Get(e.EntityID)
-			if err != nil {
-				continue // entrée orpheline : l'entité a disparu, on l'ignore
-			}
-			r.Task = &t
-			r.Date = t.DueDate
-		case domain.SearchTypeNote:
-			n, err := a.notes.Get(e.EntityID)
-			if err != nil {
-				continue
-			}
-			r.Note = &n
-			r.Date = &n.UpdatedAt
-		case domain.SearchTypeMeeting:
-			if m, err := a.meetings.Get(e.EntityID); err == nil {
-				r.Meeting = &m
-				r.Date = &m.UpdatedAt
-			} else if i, err := a.meetings.GetInstance(e.EntityID); err == nil {
-				r.Instance = &i
-				r.Date = &i.Timestamp
-				if m, err := a.meetings.Get(i.MeetingID); err == nil {
-					r.Meeting = &m
-					r.Title = m.Title
-				}
-			} else {
-				continue
-			}
+		//
+		// Le chargement est partagé avec la recherche sémantique (app_semantic.go) :
+		// une seule définition de « à quoi ressemble une ligne de résultat »,
+		// donc aucun risque que les deux modes divergent à l'affichage.
+		r, contenu, ok := a.chargerResultat(e.Type, e.EntityID)
+		if !ok {
+			continue // entrée orpheline : l'entité a disparu, on l'ignore
 		}
 
 		results = append(results, r)
 		// L'extrait porte sur le contenu, qui est du HTML pour les notes et les
 		// comptes rendus : le balisage est retiré avant découpe, sinon
 		// l'utilisateur lirait des morceaux de <p> autour de son mot-clé.
-		extraits[r.ID] = search.Highlight(texteBrut(e.Content), query, search.DefaultContextChars)
+		extraits[r.ID] = search.Highlight(contenu, query, search.DefaultContextChars)
 	}
 
 	ordered := search.Sort(results)

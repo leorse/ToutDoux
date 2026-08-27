@@ -38,6 +38,29 @@ func Open(path string) (*DB, error) {
 		return nil, fmt.Errorf("activation des clés étrangères : %w", err)
 	}
 
+	// Délai d'attente sur verrou.
+	//
+	// Sans lui, SQLite rend SQLITE_BUSY **immédiatement** dès qu'une autre
+	// connexion tient le verrou d'écriture. L'application a plusieurs lecteurs
+	// concurrents — l'interface, et la barre système qui relit les tâches toutes
+	// les 30 secondes (§2.10) — pendant que la sauvegarde automatique écrit. Une
+	// collision est donc normale, pas exceptionnelle : il faut attendre, pas
+	// échouer.
+	if _, err := sqlDB.Exec(`PRAGMA busy_timeout = 5000;`); err != nil {
+		sqlDB.Close()
+		return nil, fmt.Errorf("délai d'attente sur verrou : %w", err)
+	}
+
+	// Journalisation WAL : les lecteurs ne bloquent plus l'écrivain et
+	// réciproquement. C'est exactement notre schéma d'accès. Sans effet sur une
+	// base en mémoire, qui n'a pas de fichier de journal.
+	if path != ":memory:" {
+		if _, err := sqlDB.Exec(`PRAGMA journal_mode = WAL;`); err != nil {
+			sqlDB.Close()
+			return nil, fmt.Errorf("passage en WAL : %w", err)
+		}
+	}
+
 	// Une base ":memory:" est propre à chaque connexion : plusieurs connexions
 	// verraient chacune une base vide. On force donc le pool à une connexion.
 	if path == ":memory:" {
@@ -151,6 +174,30 @@ CREATE INDEX IF NOT EXISTS idx_tasks_parent  ON tasks(parent_id);
 CREATE INDEX IF NOT EXISTS idx_notes_project ON notes(project_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_project ON meetings(project_id);
 CREATE INDEX IF NOT EXISTS idx_instances_meeting ON meeting_instances(meeting_id, timestamp DESC);
+`,
+	},
+	{
+		version: 2,
+		stmts: `
+-- Index sémantique (§2.12, §3.2). Table ordinaire et non virtuelle : la
+-- similarité se calcule en Go à la lecture, il n'y a rien à indexer côté
+-- SQLite. Le §3.2 écarte explicitement une extension vectorielle, qui
+-- réintroduirait une dépendance native à charger.
+CREATE TABLE IF NOT EXISTS embeddings (
+    entity_id   TEXT PRIMARY KEY,   -- une entité, un vecteur
+    type        TEXT NOT NULL CHECK(type IN ('note', 'meeting', 'task')),
+    project_id  TEXT NOT NULL,
+    vector      BLOB NOT NULL,      -- float32 sérialisés en little-endian
+    dimensions  INTEGER NOT NULL,   -- garde-fou : refuser de comparer deux
+                                    -- vecteurs de tailles différentes, ce qui
+                                    -- arriverait si le modèle changeait
+    source_hash TEXT NOT NULL,      -- empreinte du texte vectorisé, pour ne pas
+                                    -- recalculer un vecteur inchangé
+    updated_at  DATETIME,
+    FOREIGN KEY(project_id) REFERENCES projects(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_embeddings_project ON embeddings(project_id);
 `,
 	},
 }

@@ -4,6 +4,7 @@ import type { domain } from '../../wailsjs/go/models'
 import { useAutosave } from '../useAutosave'
 import { ContextMenu, type MenuState } from './ContextMenu'
 import { RichEditor } from './RichEditor'
+import { SemanticButton } from './SemanticButton'
 import { Split } from './Split'
 
 /**
@@ -158,9 +159,16 @@ export function NotesTab({
                   onBlur={save.flush}
                 />
               </div>
-              <p aria-live="polite" className="border-t border-neutral-300 px-3 py-1 text-xs text-neutral-500">
-                {statut}
-              </p>
+              <div className="flex items-center gap-3 border-t border-neutral-300 px-3 py-1">
+                <p aria-live="polite" className="text-xs text-neutral-500">
+                  {statut}
+                </p>
+                {/* Opt-in sémantique (§2.12). Remonté par sa clé : changer de
+                    note doit relire l'état, pas le garder de la précédente. */}
+                <span className="ml-auto">
+                  <SemanticButton key={selected.id} entityType="note" entityId={selected.id} />
+                </span>
+              </div>
             </div>
           ) : (
             <p className="p-4 text-sm text-neutral-500">Aucune note sélectionnée.</p>
