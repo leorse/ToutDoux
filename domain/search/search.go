@@ -35,6 +35,7 @@ const (
 	TypeTask    Type = "task"    // case à cocher réelle + pastille d'importance
 	TypeNote    Type = "note"    // 📝
 	TypeMeeting Type = "meeting" // 📞
+	TypeProject Type = "project" // 📁
 )
 
 // Result est une entrée de la liste de résultats (§2.9).
@@ -52,6 +53,7 @@ type Result struct {
 	Note     *domain.Note            `json:"note,omitempty"`
 	Meeting  *domain.Meeting         `json:"meeting,omitempty"`
 	Instance *domain.MeetingInstance `json:"instance,omitempty"`
+	Project  *domain.Project         `json:"project,omitempty"`
 }
 
 // Sort ordonne les résultats pour l'affichage (§2.9).

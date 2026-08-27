@@ -15,7 +15,7 @@ describe('Vue Priorités (§2.8)', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('navigation', { name: 'Projets' })).toBeInTheDocument())
 
-    await user.click(screen.getByRole('tab', { name: 'Priorités' }))
+    await user.click(screen.getByRole('tab', { name: /Priorités/ }))
 
     // La sidebar disparaît : la vue balaie tous les projets par nature.
     expect(screen.queryByRole('navigation', { name: 'Projets' })).not.toBeInTheDocument()
@@ -28,7 +28,7 @@ describe('Vue Priorités (§2.8)', () => {
   it('un simple clic affiche le détail en lecture seule', async () => {
     const user = userEvent.setup()
     render(<App />)
-    await user.click(screen.getByRole('tab', { name: 'Priorités' }))
+    await user.click(screen.getByRole('tab', { name: /Priorités/ }))
 
     const section = await screen.findByRole('list', { name: /Tâches Critiques/ })
     await user.click(within(section).getAllByRole('button')[0])
@@ -41,7 +41,7 @@ describe('Vue Priorités (§2.8)', () => {
   it('un double-clic bascule sur la vue Projets et ouvre la tâche', async () => {
     const user = userEvent.setup()
     render(<App />)
-    await user.click(screen.getByRole('tab', { name: 'Priorités' }))
+    await user.click(screen.getByRole('tab', { name: /Priorités/ }))
 
     const section = await screen.findByRole('list', { name: /Tâches Critiques/ })
     await user.dblClick(within(section).getAllByRole('button')[0])

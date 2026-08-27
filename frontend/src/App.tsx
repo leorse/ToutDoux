@@ -51,6 +51,37 @@ export default function App() {
   const [revision, setRevision] = useState(0)
   const signalerChangement = useCallback(() => setRevision((n) => n + 1), [])
 
+  // Nombre de tâches prioritaires, affiché sur l'onglet (§2.8).
+  //
+  // Il vient du domaine et non d'une addition des deux listes : une tâche
+  // critique portant une échéance figure dans les deux, et l'additionner la
+  // compterait deux fois. Voir stats.PriorityTasks.Total.
+  const [nbPriorites, setNbPriorites] = useState<number | null>(null)
+
+  useEffect(() => {
+    let annule = false
+    const charger = () =>
+      api.GetPriorityTasks().then(
+        (p) => {
+          if (!annule) setNbPriorites(p.total)
+        },
+        () => {
+          // Un compteur indisponible ne doit pas faire disparaître l'onglet :
+          // il s'affiche alors sans son chiffre.
+          if (!annule) setNbPriorites(null)
+        },
+      )
+
+    charger()
+    // Même rythme que le reste des échéances (§2.3) : une tâche peut devenir
+    // prioritaire par le seul passage du temps.
+    const timer = setInterval(charger, 30_000)
+    return () => {
+      annule = true
+      clearInterval(timer)
+    }
+  }, [revision])
+
   const rechargerProjets = useCallback(() => {
     api
       .ListProjects()
@@ -157,6 +188,7 @@ export default function App() {
         searching={searching}
         semantique={semantique}
         onSemantique={basculerSemantique}
+        nbPriorites={nbPriorites}
       />
 
       {error ? (
@@ -236,6 +268,7 @@ function TransverseBar({
   searching,
   semantique,
   onSemantique,
+  nbPriorites,
 }: {
   view: View
   onView: (v: View) => void
@@ -244,12 +277,20 @@ function TransverseBar({
   searching: boolean
   semantique: boolean
   onSemantique: () => void
+  nbPriorites: number | null
 }) {
   return (
     <div className="flex items-center gap-4 border-b border-neutral-300 px-3 py-2">
       <div role="tablist" aria-label="Vues" className="flex gap-1">
         <ViewTab label="Projets" active={view === 'projects'} onClick={() => onView('projects')} />
-        <ViewTab label="Priorités" active={view === 'priorities'} onClick={() => onView('priorities')} />
+        <ViewTab
+          // Le compteur fait partie du libellé plutôt que d'une pastille à côté :
+          // c'est ce qui le rend lisible par un lecteur d'écran sans balisage
+          // supplémentaire, l'onglet s'annonçant « Priorités (7) ».
+          label={nbPriorites === null ? 'Priorités' : `Priorités (${nbPriorites})`}
+          active={view === 'priorities'}
+          onClick={() => onView('priorities')}
+        />
       </div>
 
       <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">

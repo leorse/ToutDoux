@@ -363,6 +363,14 @@ Objectif : aucune modification en cours ne doit pouvoir être perdue, quelle que
 **Sélection automatique**
 - Sélectionner une réunion sélectionne automatiquement sa dernière instance (la plus récente), pour éviter un clic supplémentaire
 
+**Format de date des instances**
+
+Une instance s'affiche sous la forme **« 25 Août 2026 17:43 »** : jour sans zéro initial, mois en toutes lettres avec majuscule, année sur quatre chiffres, heure sur 24 h.
+
+Le formatage est écrit à la main plutôt que délégué à `toLocaleString('fr-FR')`, dont le format long intercale un « à » — « 25 août 2026 à 17:43 » — qui n'est pas voulu ici. La **majuscule au mois** est un choix d'affichage assumé, contraire à la typographie française courante : ces dates servent d'étiquettes dans une colonne étroite, où la capitale aide à repérer le mois d'un coup d'œil. Ne pas la « corriger » sans demander.
+
+Une date illisible rend une étiquette vide, jamais « Invalid Date » : une case vide se remarque moins qu'un message d'erreur anglais au milieu d'une liste.
+
 **Éditer notes instance**
 - Éditeur riche (même mécanique que les notes)
 - Sauvegarde auto (2s), avec la même fiabilité de flush immédiat qu'en 2.6 (blur, changement d'instance/réunion/projet)
@@ -413,6 +421,14 @@ Objectif : aucune modification en cours ne doit pouvoir être perdue, quelle que
 - **Simple clic** sur une tâche → la sélectionne, affiche son détail en **lecture seule** à droite (même structure visuelle que le panneau de détail de l'onglet Tâches — nom, importance, échéance, description — mais aucun champ éditable), avec un bouton "Ouvrir dans Tâches"
 - **Double-clic** (ou bouton "Ouvrir") → ferme la vue Priorités, bascule sur la vue **Projets**, sélectionne le bon projet, déplie tous les ancêtres nécessaires dans l'arbre, sélectionne la tâche : comportement d'édition classique, comme si l'utilisateur l'avait ouverte lui-même
 
+**Compteur sur l'onglet — et son dédoublonnage**
+
+L'onglet de la bande transverse affiche le nombre de tâches prioritaires : « Priorités (7) ». Il se rafraîchit à chaque écriture et sur le cycle de 30 s du §2.3, une tâche pouvant le devenir par le seul passage du temps.
+
+Ce compte est **dédoublonné**, et c'est le point à ne pas manquer. Une tâche Critique portant une échéance figure dans les **deux** sections : elle est prioritaire à deux titres, et la voir aux deux endroits est voulu. Mais elle ne représente **qu'une seule chose à faire**. Additionner les deux listes gonflerait le compteur et ferait paraître la charge plus lourde qu'elle n'est — sur le jeu d'essai, l'addition dépasse d'un tiers le nombre réel.
+
+Le dédoublonnage est fait **dans le domaine** (`stats.PriorityTasks.Total`), pas à l'affichage : c'est une règle métier sur ce qu'est une priorité, et l'interface n'aurait aucune raison de la connaître.
+
 ---
 
 ### 2.9 RECHERCHE GLOBALE
@@ -450,8 +466,20 @@ Objectif : aucune modification en cours ne doit pouvoir être perdue, quelle que
 ```
 - Résultats triés par date décroissante (plus récent en premier ; sans date en dernier)
 
+**Périmètre — quatre types d'entités**
+
+| Type | Ce qui est indexé |
+|---|---|
+| 📁 **Projet** | son nom |
+| Tâche | son nom et sa description |
+| 📝 Note | son titre et son contenu |
+| 📞 Réunion / instance | le titre de la réunion, les notes de l'instance |
+
+Les **projets** ont été ajoutés après coup : ils manquaient, alors qu'ils sont le premier repère de l'application. Un projet est indexé sous son propre identifiant de projet — il est à la fois l'entité et son rattachement —, ce qui fait que la purge d'index d'un projet supprimé emporte aussi sa propre entrée, sans traitement particulier. Son entrée est réécrite au renommage, et la reconstruction du démarrage couvre « Transverse / Divers », qui n'est créé par aucune commande.
+
 **Icônes par type**
 - Tâche : **case à cocher réelle** reflétant l'état complété/actif de la tâche **+ pastille colorée d'importance** (remplace le simple "✓" de la v1, jugé peu informatif)
+- 📁 Projet
 - 📝 Note
 - 📞 Réunion / instance
 
@@ -562,6 +590,21 @@ Les deux icônes de droite ne sont **pas de même nature**, et le schéma ne doi
 **Vue Priorités** : pleine largeur, pas de sidebar, split interne liste/détail (2.8)
 
 **Vue Préférences** : pleine largeur, pas de sidebar, contenu statique (2.13)
+
+**Double-clic sur le fond d'une liste = création**
+
+Raccourci transverse : double-cliquer sur le fond — pas sur une ligne — crée un élément, exactement comme l'entrée « + Nouveau… » du menu contextuel. Le clic droit reste disponible et n'a pas changé ; c'est un chemin plus court, pas un remplacement.
+
+Deux précisions qui font toute la différence à l'usage :
+
+- **Un double-clic sur une ligne ne crée jamais rien.** Il garde son sens propre — renommer un projet, sélectionner une tâche. Sans ce filtre, un clic un peu vif sur un projet en ajouterait un.
+- **Le message d'état vide fait partie du fond.** « Aucune réunion. Double-clic ou clic droit pour en créer une. » doit répondre au double-clic, sinon la liste vide est le seul endroit où le raccourci ne marche pas — précisément là où on en a le plus besoin.
+
+Techniquement, les lignes réelles portent un attribut `data-ligne` et le test remonte les ancêtres du point cliqué : une ligne contient des cases à cocher, des libellés et des icônes, sur lesquels le clic peut atterrir.
+
+Le raccourci vaut sur **les cinq listes** : projets (2.1), tâches (2.2), notes (2.6), réunions et instances de réunion (2.7).
+
+Une seule exception, qui reprend la règle du clic droit : sur la colonne des instances **sans réunion sélectionnée**, le double-clic ne fait rien. Il n'y aurait rien à quoi rattacher l'instance (2.7).
 
 **Recherche active** : remplace tout le contenu, pleine largeur, quelle que soit la vue de premier niveau affichée avant la recherche — Projets, Priorités ou Préférences
 
@@ -1440,9 +1483,17 @@ Deux conséquences, toutes deux inscrites dans le code :
   passe entière, ce qui est honnête : le modèle ne sait effectivement pas
   trancher. Le seuil absolu reste, à 0,70, comme simple garde-fou contre
   l'aberration.
-- **Le score n'est pas affiché en clair.** « 83 % » se lirait comme une
-  quasi-certitude alors que seul l'écart entre deux lignes veut dire quelque
-  chose. Il reste consultable en infobulle.
+- **Le score est affiché brut, jamais en pourcentage.** « 0,873 » dans la liste,
+  et repris dans le panneau de détail. Le format n'est pas cosmétique : « 87 % »
+  se lirait comme une confiance, alors que la valeur ne veut rien dire seule —
+  c'est l'écart avec les lignes voisines qui informe. Un nombre à trois
+  décimales invite à comparer, un pourcentage invite à conclure. L'infobulle
+  rappelle la plage réelle du modèle.
+
+  *(Décision révisée : le score avait d'abord été retiré de l'affichage pour
+  cette raison. Le rendre visible sans le déguiser en pourcentage répond au
+  besoin — comprendre l'ordre de la liste — sans le travers qu'on cherchait à
+  éviter.)*
 
 #### Vérification finale ✅
 

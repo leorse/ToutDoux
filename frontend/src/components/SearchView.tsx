@@ -134,13 +134,12 @@ export function SearchView({
                       onClick={() => setSelectedId(r.id)}
                       onDoubleClick={() => ouvrir(r)}
                       aria-current={r.id === selectedId ? 'true' : undefined}
-                      /* La similarité n'est pas affichée en clair.
-                         Mesurée sur ce modèle, elle tient entre 0,79 et 0,88,
-                         y compris pour un document sans aucun rapport : « 83 % »
-                         se lirait comme une quasi-certitude alors que seul
-                         l'écart entre deux lignes veut dire quelque chose. Elle
-                         reste consultable en infobulle. */
-                      title={semantique ? `Similarité ${r.score.toFixed(3)}` : undefined}
+                      title={
+                        semantique
+                          ? 'Similarité avec la requête. Comparer les lignes entre elles : ' +
+                            'sur ce modèle, les valeurs tiennent toutes entre 0,79 et 0,88.'
+                          : undefined
+                      }
                       className={`flex w-full items-center gap-2 rounded border px-2 py-1 text-left text-sm ${
                         r.id === selectedId
                           ? 'border-2 border-[var(--color-selection)] bg-neutral-100'
@@ -149,7 +148,22 @@ export function SearchView({
                     >
                       <Icone result={r} />
                       <span className="truncate">{r.title || 'Sans titre'}</span>
-                      <span className="ml-auto shrink-0 rounded bg-neutral-200 px-1.5 py-0.5 text-xs text-neutral-700">
+                      {/* Score de similarité, en mode sémantique seulement.
+                          Affiché brut (0,873) et non en pourcentage : « 87 % »
+                          se lirait comme une confiance, alors que c'est un
+                          nombre à comparer aux lignes voisines — l'écart entre
+                          deux résultats est ce qui a du sens, pas la valeur
+                          absolue (§2.12). */}
+                      {semantique ? (
+                        <span className="ml-auto shrink-0 font-mono text-xs tabular-nums text-neutral-500">
+                          {r.score.toFixed(3)}
+                        </span>
+                      ) : null}
+                      <span
+                        className={`shrink-0 rounded bg-neutral-200 px-1.5 py-0.5 text-xs text-neutral-700 ${
+                          semantique ? '' : 'ml-auto'
+                        }`}
+                      >
                         {r.projectName}
                       </span>
                     </button>
@@ -188,8 +202,8 @@ function Icone({ result }: { result: main.SearchResult }) {
       </span>
     )
   }
-  const emoji = result.type === 'note' ? '📝' : '📞'
-  const label = result.type === 'note' ? 'Note' : 'Réunion'
+  const emoji = result.type === 'note' ? '📝' : result.type === 'project' ? '📁' : '📞'
+  const label = result.type === 'note' ? 'Note' : result.type === 'project' ? 'Projet' : 'Réunion'
   return (
     <span aria-label={label} title={label} className="shrink-0">
       {emoji}
@@ -211,7 +225,10 @@ function Apercu({
   return (
     <div className="flex h-full flex-col gap-3 p-3">
       <h2 className="text-sm font-semibold">{result.title || 'Sans titre'}</h2>
-      <p className="text-xs text-neutral-500">Projet : {result.projectName}</p>
+      <p className="text-xs text-neutral-500">
+        Projet : {result.projectName}
+        {result.score > 0 ? <> · Similarité {result.score.toFixed(3)}</> : null}
+      </p>
 
       <div className="min-h-0 flex-1 overflow-auto rounded border border-neutral-200 bg-neutral-50 p-2 text-sm">
         {result.snippet ? (

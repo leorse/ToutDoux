@@ -87,6 +87,23 @@ describe('Bascule et résultats sémantiques (§2.12)', () => {
     // ces mots, mais n'ont pas été ajoutées à l'index.
     expect(lignes).toHaveLength(1)
     expect(within(resultats).getByText('Compte rendu du 12/08')).toBeInTheDocument()
+
+    // Le score est affiché brut, à trois décimales : c'est ce qui explique
+    // l'ordre de la liste, qui n'est plus chronologique (§2.12).
+    expect(within(resultats).getByText(/^\d\.\d{3}$/)).toBeInTheDocument()
+  })
+
+  it('le score n’apparaît pas en recherche mot-clé', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Projets' })).toBeInTheDocument())
+
+    await user.type(screen.getByRole('searchbox', { name: /Rechercher/ }), 'échéance')
+
+    // La pertinence FTS5 n'est pas exposée : afficher un 0.000 partout ferait
+    // croire à une mesure alors qu'il n'y en a pas.
+    const resultats = await screen.findByRole('list', { name: 'Résultats' })
+    expect(within(resultats).queryByText(/^\d\.\d{3}$/)).not.toBeInTheDocument()
   })
 
   it('un index vide se dit, il ne s’affiche pas comme « aucun résultat »', async () => {

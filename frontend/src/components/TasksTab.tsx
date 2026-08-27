@@ -225,6 +225,7 @@ export function TasksTab({
               onMenu={setMenu}
               menuPourTache={menuPourTache}
               menuPourFond={menuPourFond}
+              onCreerRacine={() => creer('')}
             />
           }
           second={

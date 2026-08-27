@@ -321,6 +321,7 @@ export namespace main {
 	    note?: domain.Note;
 	    meeting?: domain.Meeting;
 	    instance?: domain.MeetingInstance;
+	    project?: domain.Project;
 	    snippet?: search.Snippet;
 	    projectName: string;
 	    score: number;
@@ -340,6 +341,7 @@ export namespace main {
 	        this.note = this.convertValues(source["note"], domain.Note);
 	        this.meeting = this.convertValues(source["meeting"], domain.Meeting);
 	        this.instance = this.convertValues(source["instance"], domain.MeetingInstance);
+	        this.project = this.convertValues(source["project"], domain.Project);
 	        this.snippet = this.convertValues(source["snippet"], search.Snippet);
 	        this.projectName = source["projectName"];
 	        this.score = source["score"];
@@ -561,6 +563,7 @@ export namespace stats {
 	export class PriorityTasks {
 	    criticalOrHigh: domain.Task[];
 	    dueSoon: domain.Task[];
+	    total: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new PriorityTasks(source);
@@ -570,6 +573,7 @@ export namespace stats {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.criticalOrHigh = this.convertValues(source["criticalOrHigh"], domain.Task);
 	        this.dueSoon = this.convertValues(source["dueSoon"], domain.Task);
+	        this.total = source["total"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

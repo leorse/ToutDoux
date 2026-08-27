@@ -109,6 +109,18 @@ func texteBrut(html string) string {
 
 /* ---------------- Tenue de l'index (§3.2) ---------------- */
 
+// indexProject écrit l'entrée d'index d'un projet (§2.9).
+//
+// Le projet est indexé sous son propre identifiant de projet : il est à la fois
+// l'entité et son rattachement. C'est ce qui fait que DeleteByProject emporte
+// aussi l'entrée du projet lui-même, sans traitement particulier.
+func (a *App) indexProject(p domain.Project) error {
+	return a.index.Put(domain.IndexEntry{
+		Type: domain.SearchTypeProject, EntityID: p.ID, ProjectID: p.ID,
+		Title: p.Name, Content: "", CreatedAt: &p.CreatedAt,
+	})
+}
+
 // indexTask écrit l'entrée d'index d'une tâche.
 func (a *App) indexTask(t domain.Task) error {
 	return a.index.Put(domain.IndexEntry{
@@ -161,6 +173,9 @@ func (a *App) reindexAll() error {
 	}
 	for _, p := range projets {
 		if err := a.index.DeleteByProject(p.ID); err != nil {
+			return err
+		}
+		if err := a.indexProject(p); err != nil {
 			return err
 		}
 		notes, err := a.notes.ListByProject(p.ID)

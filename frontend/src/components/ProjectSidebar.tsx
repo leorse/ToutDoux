@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { surLeFond } from '../fond'
 import type { domain, stats } from '../../wailsjs/go/models'
 import { ContextMenu, type MenuState } from './ContextMenu'
 
@@ -66,6 +67,11 @@ export function ProjectSidebar({ projects, selectedId, onSelect, onChanged, onEr
         onContextMenu={(e) => {
           e.preventDefault()
           setMenu({ x: e.clientX, y: e.clientY, items: [{ kind: 'action', label: '+ Nouveau projet', onSelect: creer }] })
+        }}
+        // Double-clic sur le fond : création directe (§2.1). Le double-clic sur
+        // une ligne garde son sens, qui est de renommer — d'où le filtre.
+        onDoubleClick={(e) => {
+          if (surLeFond(e)) creer()
         }}
       >
         <ul className="flex flex-col gap-1">
@@ -156,7 +162,7 @@ function ProjectRow({
   }, [project.id, project.name, revision])
 
   return (
-    <li>
+    <li data-ligne>
       <button
         type="button"
         onClick={() => onSelect(project.id)}

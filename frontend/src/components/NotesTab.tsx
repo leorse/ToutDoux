@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
+import { surLeFond } from '../fond'
 import type { domain } from '../../wailsjs/go/models'
 import { useAutosave } from '../useAutosave'
 import { ContextMenu, type MenuState } from './ContextMenu'
@@ -108,9 +109,14 @@ export function NotesTab({
               e.preventDefault()
               setMenu({ x: e.clientX, y: e.clientY, items: [{ kind: 'action', label: '+ Nouvelle note', onSelect: creer }] })
             }}
+            // Double-clic sur le fond : création directe (§2.11). Le filtre
+            // écarte les double-clics tombés sur une note.
+            onDoubleClick={(e) => {
+              if (surLeFond(e)) creer()
+            }}
           >
             {notes.map((note) => (
-              <li key={note.id}>
+              <li key={note.id} data-ligne>
                 <button
                   type="button"
                   onClick={() => selectionner(note.id)}
@@ -137,7 +143,7 @@ export function NotesTab({
             ))}
             {notes.length === 0 ? (
               <li className="p-2 text-xs text-neutral-500">
-                Aucune note. Clic droit pour en créer une.
+                Aucune note. Double-clic ou clic droit pour en créer une.
               </li>
             ) : null}
           </ul>

@@ -216,7 +216,7 @@ func (a *App) CreateProject(name string) (domain.Project, error) {
 	if err := a.projects.Create(p); err != nil {
 		return domain.Project{}, err
 	}
-	return p, nil
+	return p, a.indexProject(p)
 }
 
 // RenameProject renomme un projet non verrouillé.
@@ -245,7 +245,11 @@ func (a *App) RenameProject(id, newName string) (domain.Project, error) {
 	if err := a.projects.Rename(id, newName); err != nil {
 		return domain.Project{}, err
 	}
-	return a.projects.Get(id)
+	maj, err := a.projects.Get(id)
+	if err != nil {
+		return domain.Project{}, err
+	}
+	return maj, a.indexProject(maj)
 }
 
 // DeleteProjectSummary annonce ce que la suppression emportera, pour la

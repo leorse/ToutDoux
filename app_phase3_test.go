@@ -425,3 +425,84 @@ func TestMeetings_UnknownIDs(t *testing.T) {
 		t.Errorf("erreur = %v, attendu ErrEmptyName", err)
 	}
 }
+
+// Les noms de projets sont cherchables au même titre que le reste (§2.9).
+func TestSearchGlobal_FindsProjects(t *testing.T) {
+	app := newTestApp(t)
+
+	p, err := app.CreateProject("Refonte du portail client")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := app.SearchGlobal("portail")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var trouve *SearchResult
+	for i := range res {
+		if res[i].ID == p.ID {
+			trouve = &res[i]
+		}
+	}
+	if trouve == nil {
+		t.Fatalf("le projet n'est pas trouvé : %+v", res)
+	}
+	if trouve.Type != "project" {
+		t.Fatalf("type = %q, attendu project", trouve.Type)
+	}
+	// L'entité voyage avec le résultat, comme pour les autres types : la ligne
+	// doit pouvoir ouvrir le projet.
+	if trouve.Project == nil || trouve.Project.Name != "Refonte du portail client" {
+		t.Fatalf("projet absent du résultat : %+v", trouve)
+	}
+}
+
+func TestSearchGlobal_ProjectRenameReindexes(t *testing.T) {
+	app := newTestApp(t)
+
+	p, err := app.CreateProject("Ancien intitulé")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.RenameProject(p.ID, "Migration SIRH"); err != nil {
+		t.Fatal(err)
+	}
+
+	apres, err := app.SearchGlobal("SIRH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(apres) == 0 {
+		t.Fatal("le nouveau nom ne remonte pas")
+	}
+	avant, err := app.SearchGlobal("Ancien")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range avant {
+		if r.ID == p.ID {
+			t.Fatal("l'ancien nom remonte encore : l'index n'a pas été mis à jour")
+		}
+	}
+}
+
+// Le projet verrouillé est indexé par la reconstruction du démarrage, pas par
+// CreateProject : il est créé par la couche de persistance (§2.1).
+func TestSearchGlobal_FindsDiversProject(t *testing.T) {
+	app := newTestApp(t)
+	if err := app.reindexAll(); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := app.SearchGlobal("Transverse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range res {
+		if r.ID == domain.DiversProjectID {
+			return
+		}
+	}
+	t.Fatalf("le projet verrouillé n'est pas indexé : %+v", res)
+}

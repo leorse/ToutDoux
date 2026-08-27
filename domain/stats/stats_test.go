@@ -323,3 +323,36 @@ func TestTray_NotifyOnlyOnImminent(t *testing.T) {
 		t.Errorf("TasksToNotify = %v, seule \"imminente\" attendue", ids(s.TasksToNotify))
 	}
 }
+
+// Une tâche prioritaire à deux titres ne compte qu'une fois (§2.8).
+func TestPriorities_TotalSansDoublon(t *testing.T) {
+	echeance := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
+	tasks := []domain.Task{
+		// Critique ET datée : présente dans les deux sections.
+		{ID: "double", Importance: domain.ImportanceCritique, DueDate: &echeance},
+		// Haute sans échéance : une seule section.
+		{ID: "haute", Importance: domain.ImportanceHaute},
+		// Datée sans importance : l'autre section.
+		{ID: "datee", Importance: domain.ImportanceNormale, DueDate: &echeance},
+		// Ni l'un ni l'autre : hors des priorités.
+		{ID: "banale", Importance: domain.ImportanceBasse},
+		// Terminée : plus une priorité, quelle que soit son importance.
+		{ID: "faite", Importance: domain.ImportanceCritique, DueDate: &echeance, Completed: true},
+	}
+
+	p := Priorities(tasks)
+
+	if len(p.CriticalOrHigh) != 2 || len(p.DueSoon) != 2 {
+		t.Fatalf("sections = %d critiques/hautes, %d échéances", len(p.CriticalOrHigh), len(p.DueSoon))
+	}
+	// Deux listes de deux, mais trois tâches distinctes.
+	if p.Total != 3 {
+		t.Fatalf("Total = %d, attendu 3 tâches distinctes", p.Total)
+	}
+}
+
+func TestPriorities_TotalVide(t *testing.T) {
+	if p := Priorities(nil); p.Total != 0 {
+		t.Fatalf("Total = %d sur une liste vide", p.Total)
+	}
+}

@@ -26,7 +26,7 @@ describe('Bande transverse', () => {
   it('§2.11 — porte les deux vues de premier niveau et la recherche', () => {
     render(<App />)
     expect(screen.getByRole('tab', { name: 'Projets' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Priorités' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Priorités/ })).toBeInTheDocument()
     expect(screen.getByRole('searchbox', { name: /rechercher dans les tâches/i })).toBeInTheDocument()
   })
 

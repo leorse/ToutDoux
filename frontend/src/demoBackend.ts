@@ -293,9 +293,16 @@ export const demoBackend = {
       if (b.dueDate) return 1
       return 0
     }
+    const critiques = actives
+      .filter((x) => x.importance === 'Critique' || x.importance === 'Haute')
+      .sort(parUrgence)
+    const datees = actives.filter((x) => x.dueDate).sort(parUrgence)
     return {
-      criticalOrHigh: actives.filter((x) => x.importance === 'Critique' || x.importance === 'Haute').sort(parUrgence),
-      dueSoon: actives.filter((x) => x.dueDate).sort(parUrgence),
+      criticalOrHigh: critiques,
+      dueSoon: datees,
+      // Dédoublonné : une tâche critique **et** datée figure dans les deux
+      // listes mais ne compte que pour une (§2.8).
+      total: new Set([...critiques, ...datees].map((x) => x.id)).size,
     }
   },
 
@@ -324,6 +331,16 @@ export const demoBackend = {
     }
 
     const out: unknown[] = []
+    // Les projets sont cherchables comme le reste (§2.9).
+    for (const p of projects) {
+      if (p.name.toLowerCase().includes(q)) {
+        out.push({
+          type: 'project', id: p.id, title: p.name, projectId: p.id,
+          projectName: p.name, date: p.updatedAt, project: p,
+          snippet: extrait(p.name),
+        })
+      }
+    }
     for (const t of tasks) {
       if (`${t.name} ${t.description}`.toLowerCase().includes(q)) {
         out.push({

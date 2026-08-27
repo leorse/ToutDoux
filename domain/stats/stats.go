@@ -83,6 +83,16 @@ func Sidebar(tasks []domain.Task, notes []domain.Note, meetings []domain.Meeting
 type PriorityTasks struct {
 	CriticalOrHigh []domain.Task `json:"criticalOrHigh"`
 	DueSoon        []domain.Task `json:"dueSoon"`
+
+	// Total est le nombre de tâches **distinctes** des deux sections.
+	//
+	// Une tâche critique portant une échéance figure dans les deux listes : elle
+	// est prioritaire à deux titres, et la voir aux deux endroits est voulu
+	// (§2.8). Mais elle ne représente qu'une seule chose à faire, et l'annoncer
+	// deux fois dans un compteur ferait paraître la charge plus lourde qu'elle
+	// ne l'est. C'est donc ici, dans le domaine, que le dédoublonnage est fait —
+	// pas dans l'affichage, qui n'aurait aucune raison de connaître la règle.
+	Total int `json:"total"`
 }
 
 // byUrgency trie par échéance croissante, les tâches sans échéance en dernier.
@@ -108,17 +118,27 @@ func byUrgency(tasks []domain.Task) {
 // priorité, quelle que soit son importance.
 func Priorities(tasks []domain.Task) PriorityTasks {
 	var p PriorityTasks
+	distinctes := make(map[string]bool)
+
 	for _, t := range tasks {
 		if !t.Active() {
 			continue
 		}
+		retenue := false
 		if t.Importance == domain.ImportanceCritique || t.Importance == domain.ImportanceHaute {
 			p.CriticalOrHigh = append(p.CriticalOrHigh, t)
+			retenue = true
 		}
 		if t.DueDate != nil {
 			p.DueSoon = append(p.DueSoon, t)
+			retenue = true
+		}
+		if retenue {
+			distinctes[t.ID] = true
 		}
 	}
+
+	p.Total = len(distinctes)
 	byUrgency(p.CriticalOrHigh)
 	byUrgency(p.DueSoon)
 	return p

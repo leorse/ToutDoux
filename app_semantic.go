@@ -358,6 +358,14 @@ func (a *App) chargerResultat(typ domain.SearchType, entityID string) (search.Re
 	r := search.Result{Type: search.Type(typ), ID: entityID}
 
 	switch typ {
+	case domain.SearchTypeProject:
+		p, err := a.projects.Get(entityID)
+		if err != nil {
+			return r, "", false
+		}
+		r.Project, r.Title, r.ProjectID, r.Date = &p, p.Name, p.ID, &p.UpdatedAt
+		return r, "", true
+
 	case domain.SearchTypeTask:
 		t, err := a.tasks.Get(entityID)
 		if err != nil {

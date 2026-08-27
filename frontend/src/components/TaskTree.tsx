@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { domain, duedate } from '../../wailsjs/go/models'
+import { surLeFond } from '../fond'
 import type { MenuState } from './ContextMenu'
 
 export type TaskTreeProps = {
@@ -15,6 +16,8 @@ export type TaskTreeProps = {
   onMenu: (state: MenuState) => void
   menuPourTache: (task: domain.Task, x: number, y: number) => MenuState
   menuPourFond: (x: number, y: number) => MenuState
+  /** Double-clic sur le fond : création d'une tâche racine (§2.2). */
+  onCreerRacine: () => void
 }
 
 /**
@@ -26,7 +29,7 @@ export type TaskTreeProps = {
  * avec des fixtures, sans backend (§3.10).
  */
 export function TaskTree(props: TaskTreeProps) {
-  const { tasks, visible, onMenu, menuPourFond, onReparent } = props
+  const { tasks, visible, onMenu, menuPourFond, onReparent, onCreerRacine } = props
 
   // Regroupement par parent, chaque fratrie triée par orderIndex.
   const enfants = useMemo(() => {
@@ -48,6 +51,12 @@ export function TaskTree(props: TaskTreeProps) {
       onContextMenu={(e) => {
         e.preventDefault()
         onMenu(menuPourFond(e.clientX, e.clientY))
+      }}
+      // Double-clic sur le fond : même création, sans passer par le menu.
+      // Le filtre écarte les double-clics tombés sur une tâche, qui sert à
+      // déplier et à sélectionner.
+      onDoubleClick={(e) => {
+        if (surLeFond(e)) onCreerRacine()
       }}
       // Déposer sur le fond ramène la tâche à la racine du projet.
       onDragOver={(e) => e.preventDefault()}
@@ -89,7 +98,7 @@ function Noeud({
   const info = due[task.id]
 
   return (
-    <li role="treeitem" aria-expanded={mesEnfants.length ? deplie : undefined}>
+    <li role="treeitem" data-ligne aria-expanded={mesEnfants.length ? deplie : undefined}>
       <div
         draggable
         onDragStart={(e) => {

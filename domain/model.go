@@ -134,6 +134,7 @@ const (
 	SearchTypeTask    SearchType = "task"    // case à cocher + pastille d'importance
 	SearchTypeNote    SearchType = "note"    // 📝
 	SearchTypeMeeting SearchType = "meeting" // 📞
+	SearchTypeProject SearchType = "project" // 📁
 )
 
 // MeetingInstance est une occurrence datée d'une réunion (§2.7).

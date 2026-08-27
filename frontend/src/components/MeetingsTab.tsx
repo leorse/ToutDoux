@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
+import { dateInstance } from '../dates'
+import { surLeFond } from '../fond'
 import type { domain } from '../../wailsjs/go/models'
 import { useAutosave } from '../useAutosave'
 import { ContextMenu, type MenuState } from './ContextMenu'
@@ -148,9 +150,15 @@ export function MeetingsTab({
                 items: [{ kind: 'action', label: '+ Nouvelle réunion', onSelect: creerReunion }],
               })
             }}
+            // Double-clic sur le fond : création directe, sans passer par le
+            // menu contextuel (§2.7). Le filtre évite qu'un double-clic sur une
+            // ligne crée une réunion par mégarde.
+            onDoubleClick={(e) => {
+              if (surLeFond(e)) creerReunion()
+            }}
           >
             {meetings.map((m) => (
-              <li key={m.id}>
+              <li key={m.id} data-ligne>
                 <button
                   type="button"
                   onClick={() => choisirReunion(m.id)}
@@ -178,7 +186,7 @@ export function MeetingsTab({
               </li>
             ))}
             {meetings.length === 0 ? (
-              <li className="p-2 text-xs text-neutral-500">Aucune réunion. Clic droit pour en créer une.</li>
+              <li className="p-2 text-xs text-neutral-500">Aucune réunion. Double-clic ou clic droit pour en créer une.</li>
             ) : null}
           </ul>
         }
@@ -203,9 +211,15 @@ export function MeetingsTab({
                     items: [{ kind: 'action', label: '+ Nouvelle instance', onSelect: creerInstance }],
                   })
                 }}
+                // Double-clic sur le fond : création directe (§2.11). Même
+                // réserve que le clic droit — sans réunion sélectionnée, il n'y
+                // a rien à rattacher, donc rien ne se passe (§2.7).
+                onDoubleClick={(e) => {
+                  if (meetingId && surLeFond(e)) creerInstance()
+                }}
               >
                 {instances.map((i) => (
-                  <li key={i.id}>
+                  <li key={i.id} data-ligne>
                     <button
                       type="button"
                       onClick={() => choisirInstance(i.id)}
@@ -227,17 +241,12 @@ export function MeetingsTab({
                         i.id === instanceId ? 'bg-neutral-200' : 'hover:bg-neutral-100'
                       }`}
                     >
-                      {new Date(i.timestamp).toLocaleString('fr-FR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {dateInstance(i.timestamp)}
                     </button>
                   </li>
                 ))}
                 {meetingId && instances.length === 0 ? (
-                  <li className="p-2 text-xs text-neutral-500">Aucune instance. Clic droit pour en créer une.</li>
+                  <li className="p-2 text-xs text-neutral-500">Aucune instance. Double-clic ou clic droit pour en créer une.</li>
                 ) : null}
               </ul>
             }
