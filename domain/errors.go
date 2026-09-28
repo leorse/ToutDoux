@@ -16,9 +16,9 @@ var (
 	// casse (§2.1).
 	ErrDuplicateName = errors.New("un projet porte déjà ce nom")
 
-	// ErrProjectLocked : tentative de renommage ou de suppression du projet
-	// "Transverse / Divers" (§2.1).
-	ErrProjectLocked = errors.New("ce projet est verrouillé : il ne peut être ni renommé ni supprimé")
+	// ErrProjectLocked : tentative de renommage, de suppression ou de masquage
+	// du projet "Transverse / Divers" (§2.1).
+	ErrProjectLocked = errors.New("ce projet est verrouillé : il ne peut être ni renommé, ni supprimé, ni caché")
 
 	// ErrInvalidImportance : importance hors des quatre valeurs autorisées.
 	ErrInvalidImportance = errors.New("importance invalide")

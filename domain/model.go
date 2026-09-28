@@ -48,6 +48,7 @@ type Project struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Locked    bool      `json:"locked"` // vrai uniquement pour "Transverse / Divers"
+	Hidden    bool      `json:"hidden"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -100,6 +101,7 @@ type Note struct {
 	ProjectID string    `json:"projectId"`
 	Title     string    `json:"title"`
 	Content   string    `json:"content"`
+	Hidden    bool      `json:"hidden"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -109,6 +111,7 @@ type Meeting struct {
 	ID        string    `json:"id"`
 	ProjectID string    `json:"projectId"`
 	Title     string    `json:"title"`
+	Hidden    bool      `json:"hidden"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }

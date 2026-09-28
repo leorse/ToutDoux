@@ -48,6 +48,15 @@ func (a *App) RenameMeeting(meetingID, newTitle string) (domain.Meeting, error) 
 	return m, a.indexMeeting(m)
 }
 
+// SetMeetingHidden masque ou réaffiche une réunion (§2.7). Purement visuel :
+// la recherche continue de la trouver.
+func (a *App) SetMeetingHidden(meetingID string, hidden bool) (domain.Meeting, error) {
+	if err := a.meetings.SetHidden(meetingID, hidden); err != nil {
+		return domain.Meeting{}, err
+	}
+	return a.meetings.Get(meetingID)
+}
+
 // DeleteMeeting supprime une réunion et ses instances (§2.7).
 func (a *App) DeleteMeeting(meetingID string) error {
 	instances, err := a.meetings.ListInstances(meetingID)

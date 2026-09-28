@@ -14,7 +14,7 @@ type NoteRepository struct{ db *DB }
 // NewNoteRepository câble le repository sur une base ouverte.
 func NewNoteRepository(db *DB) *NoteRepository { return &NoteRepository{db: db} }
 
-const noteColumns = `id, project_id, title, content, created_at, updated_at`
+const noteColumns = `id, project_id, title, content, hidden, created_at, updated_at`
 
 func scanNote(s interface{ Scan(...any) error }) (domain.Note, error) {
 	var (
@@ -22,7 +22,7 @@ func scanNote(s interface{ Scan(...any) error }) (domain.Note, error) {
 		content          sql.NullString
 		created, updated string
 	)
-	if err := s.Scan(&n.ID, &n.ProjectID, &n.Title, &content, &created, &updated); err != nil {
+	if err := s.Scan(&n.ID, &n.ProjectID, &n.Title, &content, &n.Hidden, &created, &updated); err != nil {
 		return domain.Note{}, err
 	}
 	n.Content = content.String
@@ -71,13 +71,24 @@ func (r *NoteRepository) Get(id string) (domain.Note, error) {
 // Create insère une note.
 func (r *NoteRepository) Create(n domain.Note) error {
 	_, err := r.db.Exec(
-		`INSERT INTO notes (`+noteColumns+`) VALUES (?, ?, ?, ?, ?, ?)`,
-		n.ID, n.ProjectID, n.Title, n.Content, formatTime(n.CreatedAt), formatTime(n.UpdatedAt),
+		`INSERT INTO notes (`+noteColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		n.ID, n.ProjectID, n.Title, n.Content, n.Hidden, formatTime(n.CreatedAt), formatTime(n.UpdatedAt),
 	)
 	if err != nil {
 		return fmt.Errorf("création de la note : %w", err)
 	}
 	return nil
+}
+
+// SetHidden masque ou réaffiche une note (§2.6).
+//
+// N'écrit pas updated_at : ce n'est pas une modification de contenu.
+func (r *NoteRepository) SetHidden(id string, hidden bool) error {
+	res, err := r.db.Exec(`UPDATE notes SET hidden = ? WHERE id = ?`, hidden, id)
+	if err != nil {
+		return fmt.Errorf("masquage de la note : %w", err)
+	}
+	return checkAffected(res)
 }
 
 // Update écrit le titre et le contenu d'une note.

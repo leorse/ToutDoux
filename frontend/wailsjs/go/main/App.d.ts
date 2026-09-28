@@ -71,6 +71,12 @@ export function SearchGlobal(arg1:string):Promise<Array<main.SearchResult>>;
 
 export function SearchSemantic(arg1:string):Promise<Array<main.SearchResult>>;
 
+export function SetMeetingHidden(arg1:string,arg2:boolean):Promise<domain.Meeting>;
+
+export function SetNoteHidden(arg1:string,arg2:boolean):Promise<domain.Note>;
+
+export function SetProjectHidden(arg1:string,arg2:boolean):Promise<domain.Project>;
+
 export function SetTaskDueDateQuick(arg1:string,arg2:string):Promise<domain.Task>;
 
 export function TaskDeletionSummary(arg1:string):Promise<number>;

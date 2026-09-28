@@ -6,7 +6,8 @@
       "changes": [
         "Le **numéro de version** s'affiche dans la barre de titre de la fenêtre",
         "Nouvel onglet *À propos* dans les Préférences, avec l'historique des versions",
-        "Les notes et les réunions peuvent s'afficher en **plein écran**, en lecture seule (œil) ou modifiable (agrandir)"
+        "Les notes et les réunions peuvent s'afficher en **plein écran**, en lecture seule (œil) ou modifiable (agrandir)",
+        "Les projets, notes et réunions obsolètes peuvent être **cachés**, et retrouvés via l'œil de chaque liste"
       ]
     },
     {

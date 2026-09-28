@@ -252,6 +252,24 @@ func (a *App) RenameProject(id, newName string) (domain.Project, error) {
 	return maj, a.indexProject(maj)
 }
 
+// SetProjectHidden masque ou réaffiche un projet non verrouillé.
+//
+// Purement visuel : ni la recherche, ni les Priorités, ni la barre système ne
+// tiennent compte de ce marqueur (§2.1).
+func (a *App) SetProjectHidden(id string, hidden bool) (domain.Project, error) {
+	p, err := a.projects.Get(id)
+	if err != nil {
+		return domain.Project{}, err
+	}
+	if p.Locked {
+		return domain.Project{}, domain.ErrProjectLocked
+	}
+	if err := a.projects.SetHidden(id, hidden); err != nil {
+		return domain.Project{}, err
+	}
+	return a.projects.Get(id)
+}
+
 // DeleteProjectSummary annonce ce que la suppression emportera, pour la
 // confirmation demandée par le §2.1.
 type DeleteProjectSummary struct {
@@ -720,6 +738,15 @@ func (a *App) UpdateNote(noteID, title, content string) (domain.Note, error) {
 	// (§2.12). Sans effet sinon : l'opt-in est strict.
 	a.rafraichirEnArrierePlan(noteID)
 	return maj, a.indexNote(maj)
+}
+
+// SetNoteHidden masque ou réaffiche une note (§2.6). Purement visuel : la
+// recherche continue de la trouver.
+func (a *App) SetNoteHidden(noteID string, hidden bool) (domain.Note, error) {
+	if err := a.notes.SetHidden(noteID, hidden); err != nil {
+		return domain.Note{}, err
+	}
+	return a.notes.Get(noteID)
 }
 
 // DeleteNote supprime une note.

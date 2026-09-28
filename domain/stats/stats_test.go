@@ -107,6 +107,56 @@ func TestSidebar_ScopedToProject(t *testing.T) {
 	}
 }
 
+func TestSidebar_HiddenCounters(t *testing.T) {
+	notes := []domain.Note{
+		{ID: "n1", ProjectID: "p1"},
+		{ID: "n2", ProjectID: "p1"},
+		{ID: "n3", ProjectID: "p1", Hidden: true},
+		{ID: "n4", ProjectID: "p2", Hidden: true}, // un autre projet, ignoré
+	}
+	meetings := []domain.Meeting{
+		{ID: "m1", ProjectID: "p1", Hidden: true},
+		{ID: "m2", ProjectID: "p1", Hidden: true},
+	}
+
+	s := Sidebar(nil, notes, meetings, "p1", now)
+	if s.NotesCount != 2 {
+		t.Errorf("NotesCount = %d, attendu 2", s.NotesCount)
+	}
+	if s.HiddenNotesCount != 1 {
+		t.Errorf("HiddenNotesCount = %d, attendu 1", s.HiddenNotesCount)
+	}
+	if s.MeetingsCount != 0 {
+		t.Errorf("MeetingsCount = %d, attendu 0", s.MeetingsCount)
+	}
+	if s.HiddenMeetingsCount != 2 {
+		t.Errorf("HiddenMeetingsCount = %d, attendu 2", s.HiddenMeetingsCount)
+	}
+}
+
+func TestSidebar_NoHiddenItems(t *testing.T) {
+	notes := []domain.Note{{ID: "n1", ProjectID: "p1"}}
+	s := Sidebar(nil, notes, nil, "p1", now)
+	if s.HiddenNotesCount != 0 {
+		t.Errorf("HiddenNotesCount = %d, attendu 0", s.HiddenNotesCount)
+	}
+	if s.HiddenMeetingsCount != 0 {
+		t.Errorf("HiddenMeetingsCount = %d, attendu 0", s.HiddenMeetingsCount)
+	}
+}
+
+func TestSidebar_AllHidden(t *testing.T) {
+	notes := []domain.Note{{ID: "n1", ProjectID: "p1", Hidden: true}}
+	meetings := []domain.Meeting{{ID: "m1", ProjectID: "p1", Hidden: true}}
+	s := Sidebar(nil, notes, meetings, "p1", now)
+	if s.NotesCount != 0 || s.HiddenNotesCount != 1 {
+		t.Errorf("notes = %d visibles, %d cachées ; attendu 0 et 1", s.NotesCount, s.HiddenNotesCount)
+	}
+	if s.MeetingsCount != 0 || s.HiddenMeetingsCount != 1 {
+		t.Errorf("réunions = %d visibles, %d cachées ; attendu 0 et 1", s.MeetingsCount, s.HiddenMeetingsCount)
+	}
+}
+
 func TestPriorities_OnlyActiveTasks(t *testing.T) {
 	tasks := []domain.Task{
 		task("critiqueActive", domain.ImportanceCritique, false, false, nil),

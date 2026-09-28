@@ -200,6 +200,18 @@ CREATE TABLE IF NOT EXISTS embeddings (
 CREATE INDEX IF NOT EXISTS idx_embeddings_project ON embeddings(project_id);
 `,
 	},
+	{
+		version: 3,
+		stmts: `
+-- Masquage des projets, notes et réunions obsolètes (§2.1, §2.6, §2.7).
+-- Purement visuel : aucune requête transverse (Priorités, barre système,
+-- recherche) ne filtre sur cette colonne. DEFAULT 0 rend les lignes
+-- existantes visibles sans réécriture.
+ALTER TABLE projects ADD COLUMN hidden BOOLEAN NOT NULL DEFAULT 0;
+ALTER TABLE notes    ADD COLUMN hidden BOOLEAN NOT NULL DEFAULT 0;
+ALTER TABLE meetings ADD COLUMN hidden BOOLEAN NOT NULL DEFAULT 0;
+`,
+	},
 }
 
 // migrate applique les migrations non encore jouées.

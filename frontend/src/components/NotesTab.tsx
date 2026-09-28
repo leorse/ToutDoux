@@ -4,6 +4,7 @@ import { surLeFond } from '../fond'
 import type { domain } from '../../wailsjs/go/models'
 import { useAutosave } from '../useAutosave'
 import { ContextMenu, type MenuState } from './ContextMenu'
+import { HiddenToggle } from './HiddenToggle'
 import { RichEditor } from './RichEditor'
 import { SemanticButton } from './SemanticButton'
 import { Split } from './Split'
@@ -17,10 +18,15 @@ import { Split } from './Split'
 export function NotesTab({
   projectId,
   onDataChanged,
+  montrerCaches,
+  onToggleCaches,
 }: {
   projectId: string
   /** Le compteur de notes de la sidebar dépend de ces écritures (§2.1). */
   onDataChanged: () => void
+  /** Œil de la liste des notes (§2.6) : montre ou non les notes cachées. */
+  montrerCaches: boolean
+  onToggleCaches: () => void
 }) {
   const [notes, setNotes] = useState<domain.Note[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -29,7 +35,8 @@ export function NotesTab({
   const [statut, setStatut] = useState<string>('')
   const [menu, setMenu] = useState<MenuState>(null)
 
-  const selected = notes.find((n) => n.id === selectedId) ?? null
+  const affichees = montrerCaches ? notes : notes.filter((n) => !n.hidden)
+  const selected = affichees.find((n) => n.id === selectedId) ?? null
 
   const recharger = useCallback(async () => {
     const liste = await api.GetNotes(projectId)
@@ -38,8 +45,19 @@ export function NotesTab({
   }, [projectId])
 
   useEffect(() => {
-    recharger().then((liste) => setSelectedId(liste[0]?.id ?? null))
+    recharger()
   }, [recharger])
+
+  // Si la note sélectionnée sort de la liste affichée — supprimée, cachée, ou
+  // œil qui se referme dessus —, la sélection retombe sur la première note
+  // affichée (§2.6). Couvre aussi la sélection initiale au premier chargement.
+  useEffect(() => {
+    setSelectedId((current) => {
+      if (current && affichees.some((n) => n.id === current)) return current
+      return affichees[0]?.id ?? null
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [affichees])
 
   useEffect(() => {
     setTitre(selected?.title ?? '')
@@ -89,8 +107,15 @@ export function NotesTab({
   async function supprimer(note: domain.Note) {
     if (!window.confirm(`Supprimer la note « ${note.title} » ?`)) return
     await api.DeleteNote(note.id)
-    const liste = await recharger()
-    if (selectedId === note.id) setSelectedId(liste[0]?.id ?? null)
+    // La sélection retombe automatiquement sur la première note affichée
+    // (effet ci-dessus) : la note supprimée disparaît de `notes`.
+    await recharger()
+    onDataChanged()
+  }
+
+  async function basculerCache(note: domain.Note) {
+    await api.SetNoteHidden(note.id, !note.hidden)
+    await recharger()
     onDataChanged()
   }
 
@@ -102,51 +127,61 @@ export function NotesTab({
         max={520}
         className="h-full"
         first={
-          <ul
-            aria-label="Notes"
-            className="h-full min-h-full p-1"
-            onContextMenu={(e) => {
-              e.preventDefault()
-              setMenu({ x: e.clientX, y: e.clientY, items: [{ kind: 'action', label: '+ Nouvelle note', onSelect: creer }] })
-            }}
-            // Double-clic sur le fond : création directe (§2.11). Le filtre
-            // écarte les double-clics tombés sur une note.
-            onDoubleClick={(e) => {
-              if (surLeFond(e)) creer()
-            }}
-          >
-            {notes.map((note) => (
-              <li key={note.id} data-ligne>
-                <button
-                  type="button"
-                  onClick={() => selectionner(note.id)}
-                  onContextMenu={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    setMenu({
-                      x: e.clientX,
-                      y: e.clientY,
-                      items: [
-                        { kind: 'action', label: '+ Nouvelle note', onSelect: creer },
-                        { kind: 'separator' },
-                        { kind: 'action', label: 'Supprimer', danger: true, onSelect: () => supprimer(note) },
-                      ],
-                    })
-                  }}
-                  className={`w-full truncate rounded px-2 py-1 text-left text-sm ${
-                    note.id === selectedId ? 'bg-neutral-200' : 'hover:bg-neutral-100'
-                  }`}
-                >
-                  {note.title || 'Sans titre'}
-                </button>
-              </li>
-            ))}
-            {notes.length === 0 ? (
-              <li className="p-2 text-xs text-neutral-500">
-                Aucune note. Double-clic ou clic droit pour en créer une.
-              </li>
-            ) : null}
-          </ul>
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-end border-b border-neutral-200 px-2 py-1">
+              <HiddenToggle montrerCaches={montrerCaches} onToggle={onToggleCaches} />
+            </div>
+            <ul
+              aria-label="Notes"
+              className="min-h-0 flex-1 overflow-auto p-1"
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setMenu({ x: e.clientX, y: e.clientY, items: [{ kind: 'action', label: '+ Nouvelle note', onSelect: creer }] })
+              }}
+              // Double-clic sur le fond : création directe (§2.11). Le filtre
+              // écarte les double-clics tombés sur une note.
+              onDoubleClick={(e) => {
+                if (surLeFond(e)) creer()
+              }}
+            >
+              {affichees.map((note) => (
+                <li key={note.id} data-ligne>
+                  <button
+                    type="button"
+                    onClick={() => selectionner(note.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setMenu({
+                        x: e.clientX,
+                        y: e.clientY,
+                        items: [
+                          { kind: 'action', label: '+ Nouvelle note', onSelect: creer },
+                          { kind: 'separator' },
+                          {
+                            kind: 'action',
+                            label: note.hidden ? 'Réafficher' : 'Cacher',
+                            onSelect: () => basculerCache(note),
+                          },
+                          { kind: 'action', label: 'Supprimer', danger: true, onSelect: () => supprimer(note) },
+                        ],
+                      })
+                    }}
+                    className={`w-full truncate rounded px-2 py-1 text-left text-sm ${
+                      note.id === selectedId ? 'bg-neutral-200' : 'hover:bg-neutral-100'
+                    } ${note.hidden ? 'italic opacity-50' : ''}`}
+                  >
+                    {note.title || 'Sans titre'}
+                  </button>
+                </li>
+              ))}
+              {affichees.length === 0 ? (
+                <li className="p-2 text-xs text-neutral-500">
+                  Aucune note. Double-clic ou clic droit pour en créer une.
+                </li>
+              ) : null}
+            </ul>
+          </div>
         }
         second={
           selected ? (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, onEvent } from './api'
 import type { domain } from '../wailsjs/go/models'
 import { MeetingsTab } from './components/MeetingsTab'
@@ -41,6 +41,21 @@ export default function App() {
   // Les filtres persistent d'un projet à l'autre : ils ne sont plus
   // réinitialisés au changement de projet, contrairement à la v1 (§2.4).
   const [filtres, setFiltres] = useState<Filtres>(FILTRES_PAR_DEFAUT)
+
+  // Un œil par liste (projets, notes, réunions), qui indique si les éléments
+  // cachés de cette liste sont montrés. Comme les filtres de tâches, l'état
+  // persiste d'un projet à l'autre et se réinitialise au redémarrage (§2.1).
+  const [cachesVisibles, setCachesVisibles] = useState({ projets: false, notes: false, reunions: false })
+  const basculerCaches = useCallback(
+    (liste: keyof typeof cachesVisibles) => setCachesVisibles((c) => ({ ...c, [liste]: !c[liste] })),
+    [],
+  )
+  // Révèle une liste (ouvre son œil) sans jamais le refermer : sert à exposer
+  // un élément caché atteint depuis la recherche ou les Priorités.
+  const reveler = useCallback(
+    (liste: keyof typeof cachesVisibles) => setCachesVisibles((c) => (c[liste] ? c : { ...c, [liste]: true })),
+    [],
+  )
 
   // Élément à ouvrir après une navigation depuis Priorités ou la Recherche.
   const [cible, setCible] = useState<CibleOuverture | null>(null)
@@ -100,6 +115,21 @@ export default function App() {
 
   useEffect(rechargerProjets, [rechargerProjets])
 
+  // Projets réellement affichés dans la sidebar, selon l'œil courant.
+  const projetsAffiches = useMemo(
+    () => (cachesVisibles.projets ? projects : projects.filter((p) => !p.hidden)),
+    [projects, cachesVisibles.projets],
+  )
+
+  // Si le projet sélectionné sort de la liste affichée — caché, ou œil qui se
+  // referme dessus —, la sélection retombe sur le premier projet affiché (§2.1).
+  useEffect(() => {
+    setSelectedProjectId((current) => {
+      if (current && projetsAffiches.some((p) => p.id === current)) return current
+      return projetsAffiches[0]?.id ?? null
+    })
+  }, [projetsAffiches])
+
   const searching = query.trim().length > 2
 
   // Échap ferme la recherche et revient à la vue précédente (§2.9).
@@ -136,13 +166,19 @@ export default function App() {
       .catch(() => setModeleAbsent(true))
   }, [semantique])
 
-  const ouvrir = useCallback((c: CibleOuverture) => {
-    setQuery('')
-    setView('projects')
-    setSelectedProjectId(c.projectId)
-    setTab(c.noteId ? 'notes' : c.meetingId || c.instanceId ? 'meetings' : 'tasks')
-    setCible(c)
-  }, [])
+  const ouvrir = useCallback(
+    (c: CibleOuverture) => {
+      setQuery('')
+      setView('projects')
+      setSelectedProjectId(c.projectId)
+      setTab(c.noteId ? 'notes' : c.meetingId || c.instanceId ? 'meetings' : 'tasks')
+      setCible(c)
+      // Un projet caché atteint depuis Priorités ou la recherche doit rester
+      // joignable : son œil s'ouvre plutôt que de laisser la cible invisible.
+      if (projects.find((p) => p.id === c.projectId)?.hidden) reveler('projets')
+    },
+    [projects, reveler],
+  )
 
   // Ouverture depuis le menu de la barre système (§2.10).
   //
@@ -223,6 +259,8 @@ export default function App() {
                 onChanged={rechargerProjets}
                 onError={setError}
                 revision={revision}
+                montrerCaches={cachesVisibles.projets}
+                onToggleCaches={() => basculerCaches('projets')}
               />
             }
             second={
@@ -234,6 +272,11 @@ export default function App() {
                 onFiltres={setFiltres}
                 onDataChanged={signalerChangement}
                 cible={cible}
+                montrerNotesCachees={cachesVisibles.notes}
+                onToggleNotesCachees={() => basculerCaches('notes')}
+                montrerReunionsCachees={cachesVisibles.reunions}
+                onToggleReunionsCachees={() => basculerCaches('reunions')}
+                onRevelerReunionCachee={() => reveler('reunions')}
               />
             }
           />
@@ -373,6 +416,11 @@ function ProjectView({
   onFiltres,
   onDataChanged,
   cible,
+  montrerNotesCachees,
+  onToggleNotesCachees,
+  montrerReunionsCachees,
+  onToggleReunionsCachees,
+  onRevelerReunionCachee,
 }: {
   tab: Tab
   onTab: (t: Tab) => void
@@ -381,6 +429,11 @@ function ProjectView({
   onFiltres: (f: Filtres) => void
   onDataChanged: () => void
   cible: CibleOuverture | null
+  montrerNotesCachees: boolean
+  onToggleNotesCachees: () => void
+  montrerReunionsCachees: boolean
+  onToggleReunionsCachees: () => void
+  onRevelerReunionCachee: () => void
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -406,7 +459,13 @@ function ProjectView({
             cibleTaskId={cible?.projectId === projectId ? cible.taskId : undefined}
           />
         ) : tab === 'notes' ? (
-          <NotesTab key={projectId} projectId={projectId} onDataChanged={onDataChanged} />
+          <NotesTab
+            key={projectId}
+            projectId={projectId}
+            onDataChanged={onDataChanged}
+            montrerCaches={montrerNotesCachees}
+            onToggleCaches={onToggleNotesCachees}
+          />
         ) : (
           <MeetingsTab
             key={projectId}
@@ -417,6 +476,9 @@ function ProjectView({
                 ? { meetingId: cible.meetingId, instanceId: cible.instanceId }
                 : undefined
             }
+            montrerCaches={montrerReunionsCachees}
+            onToggleCaches={onToggleReunionsCachees}
+            onRevelerCachee={onRevelerReunionCachee}
           />
         )}
       </div>

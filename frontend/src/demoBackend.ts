@@ -29,6 +29,9 @@ const donneesInitiales = () => ({
     { id: PROJET_DIVERS, name: 'Transverse / Divers', locked: true, createdAt: iso(-72), updatedAt: iso(-72) },
     { id: 'p-mig', name: 'Migration 2026', locked: false, createdAt: iso(-48), updatedAt: iso(-2) },
     { id: 'p-dr', name: 'Refonte du portail', locked: false, createdAt: iso(-24), updatedAt: iso(-1) },
+    // Caché par défaut : sert à vérifier que ses tâches restent dans les
+    // Priorités et que le naviguer vers lui rouvre l'œil des projets (§2.1).
+    { id: 'p-old', name: 'Ancien portail', locked: false, hidden: true, createdAt: iso(-200), updatedAt: iso(-100) },
   ] as unknown as domain.Project[],
 
   tasks: [
@@ -40,17 +43,23 @@ const donneesInitiales = () => ({
     t('t6', 'p-mig', null, 'Ancien périmètre', 'Basse', 2, { cancelled: true }),
     t('t7', PROJET_DIVERS, null, 'Commander le matériel', 'Normale', 0, {}),
     t('t8', 'p-dr', null, 'Maquette de la page d’accueil', 'Haute', 0, { due: iso(72) }),
+    // Du projet caché p-old : doit rester visible dans les Priorités (§2.1).
+    t('t9', 'p-old', null, 'Tâche du projet caché', 'Critique', 0, {}),
   ] as unknown as domain.Task[],
 
   notes: [
     n('n1', 'p-mig', 'Compte rendu du 12/08', '<p>Échéance repoussée au 30.</p>'),
     n('n2', 'p-mig', 'Points en suspens', '<p>Valider le périmètre.</p>'),
     n('n3', PROJET_DIVERS, 'Divers', ''),
+    // Cachée par défaut, pour que l'œil de démonstration ait quelque chose à révéler.
+    { ...n('n4', 'p-mig', 'Ancienne version du cahier des charges', ''), hidden: true },
   ] as unknown as domain.Note[],
 
   meetings: [
     { id: "m1", projectId: "p-mig", title: "Comité de pilotage", createdAt: iso(-48), updatedAt: iso(-2) },
     { id: "m2", projectId: "p-mig", title: "Point technique", createdAt: iso(-24), updatedAt: iso(-1) },
+    // Cachée par défaut, pour que l'œil de démonstration ait quelque chose à révéler.
+    { id: "m3", projectId: "p-mig", title: "Ancien comité, abandonné", hidden: true, createdAt: iso(-96), updatedAt: iso(-96) },
   ] as unknown as domain.Meeting[],
 
   instances: [
@@ -129,15 +138,36 @@ export const demoBackend = {
     instances = instances.filter((i) => !partants.includes(i.meetingId))
   },
 
+  /* -------- Masquage (§2.1, §2.6, §2.7) -------- */
+
+  SetProjectHidden: async (id: string, hidden: boolean) => {
+    const cible = projects.find((p) => p.id === id)
+    if (cible?.locked) throw new Error('ce projet est verrouillé : il ne peut être ni renommé, ni supprimé, ni caché')
+    projects = projects.map((p) => (p.id === id ? { ...p, hidden } : p)) as unknown as domain.Project[]
+    return projects.find((p) => p.id === id)!
+  },
+  SetNoteHidden: async (id: string, hidden: boolean) => {
+    notes = notes.map((n) => (n.id === id ? { ...n, hidden } : n)) as unknown as domain.Note[]
+    return notes.find((n) => n.id === id)!
+  },
+  SetMeetingHidden: async (id: string, hidden: boolean) => {
+    meetings = meetings.map((m) => (m.id === id ? { ...m, hidden } : m)) as unknown as domain.Meeting[]
+    return meetings.find((m) => m.id === id)!
+  },
+
   GetSidebarStats: async (projectId: string) => {
     const actives = tasks.filter((x) => x.projectId === projectId && !x.completed && !x.cancelled)
+    const notesDuProjet = notes.filter((x) => x.projectId === projectId)
+    const reunionsDuProjet = meetings.filter((m) => m.projectId === projectId)
     return {
       activeCount: actives.length,
       hasCritical: actives.some((x) => x.importance === 'Critique'),
       hasHigh: actives.some((x) => x.importance === 'Haute') && !actives.some((x) => x.importance === 'Critique'),
       dueIcon: actives.some((x) => x.dueDate) ? '🕐' : '',
-      notesCount: notes.filter((x) => x.projectId === projectId).length,
-      meetingsCount: meetings.filter((m) => m.projectId === projectId).length,
+      notesCount: notesDuProjet.filter((x) => !x.hidden).length,
+      hiddenNotesCount: notesDuProjet.filter((x) => x.hidden).length,
+      meetingsCount: reunionsDuProjet.filter((m) => !m.hidden).length,
+      hiddenMeetingsCount: reunionsDuProjet.filter((m) => m.hidden).length,
     }
   },
 

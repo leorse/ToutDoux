@@ -5,6 +5,7 @@ import { surLeFond } from '../fond'
 import type { domain } from '../../wailsjs/go/models'
 import { useAutosave } from '../useAutosave'
 import { ContextMenu, type MenuState } from './ContextMenu'
+import { HiddenToggle } from './HiddenToggle'
 import { RichEditor } from './RichEditor'
 import { SemanticButton } from './SemanticButton'
 import { Split } from './Split'
@@ -19,11 +20,19 @@ export function MeetingsTab({
   projectId,
   onDataChanged,
   cibleInstance,
+  montrerCaches,
+  onToggleCaches,
+  onRevelerCachee,
 }: {
   projectId: string
   onDataChanged: () => void
   /** Instance à ouvrir, quand on arrive depuis la recherche (§2.9). */
   cibleInstance?: { meetingId?: string; instanceId?: string }
+  /** Œil de la liste des réunions (§2.7) : montre ou non les réunions cachées. */
+  montrerCaches: boolean
+  onToggleCaches: () => void
+  /** Ouvre l'œil des réunions, sans jamais le refermer (§2.7). */
+  onRevelerCachee: () => void
 }) {
   const [meetings, setMeetings] = useState<domain.Meeting[]>([])
   const [instances, setInstances] = useState<domain.MeetingInstance[]>([])
@@ -34,6 +43,7 @@ export function MeetingsTab({
   const [menu, setMenu] = useState<MenuState>(null)
 
   const instance = instances.find((i) => i.id === instanceId) ?? null
+  const affichees = montrerCaches ? meetings : meetings.filter((m) => !m.hidden)
 
   const chargerReunions = useCallback(async () => {
     const liste = await api.GetMeetings(projectId)
@@ -43,9 +53,27 @@ export function MeetingsTab({
 
   useEffect(() => {
     chargerReunions().then((liste) => {
+      const cible = cibleInstance?.meetingId ? liste.find((m) => m.id === cibleInstance.meetingId) : undefined
+      // La réunion visée par la recherche ou les Priorités doit rester
+      // joignable même si elle est cachée : son œil s'ouvre (§2.7).
+      if (cible?.hidden) onRevelerCachee()
       setMeetingId(cibleInstance?.meetingId ?? liste[0]?.id ?? null)
     })
-  }, [chargerReunions, cibleInstance?.meetingId])
+  }, [chargerReunions, cibleInstance?.meetingId, onRevelerCachee])
+
+  // Si la réunion sélectionnée sort de la liste affichée — supprimée, cachée,
+  // ou œil qui se referme dessus —, la sélection retombe sur la première
+  // réunion affichée (§2.7). Exception : tant que la sélection est la cible
+  // explicite de `cibleInstance`, le temps que l'œil s'ouvre au-dessus, on ne
+  // la remplace pas — sinon la cible disparaîtrait avant même d'apparaître.
+  useEffect(() => {
+    setMeetingId((current) => {
+      if (current && affichees.some((m) => m.id === current)) return current
+      if (current && current === cibleInstance?.meetingId) return current
+      return affichees[0]?.id ?? null
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [affichees, cibleInstance?.meetingId])
 
   useEffect(() => {
     if (!meetingId) {
@@ -110,8 +138,15 @@ export function MeetingsTab({
   async function supprimerReunion(m: domain.Meeting) {
     if (!window.confirm(`Supprimer « ${m.title} » et tout son historique ?`)) return
     await api.DeleteMeeting(m.id)
-    const liste = await chargerReunions()
-    if (meetingId === m.id) setMeetingId(liste[0]?.id ?? null)
+    // La sélection retombe automatiquement sur la première réunion affichée
+    // (effet ci-dessus) : la réunion supprimée disparaît de `meetings`.
+    await chargerReunions()
+    onDataChanged()
+  }
+
+  async function basculerCacheReunion(m: domain.Meeting) {
+    await api.SetMeetingHidden(m.id, !m.hidden)
+    await chargerReunions()
     onDataChanged()
   }
 
@@ -139,56 +174,66 @@ export function MeetingsTab({
         max={420}
         className="h-full"
         first={
-          <ul
-            aria-label="Réunions"
-            className="h-full min-h-full p-1"
-            onContextMenu={(e) => {
-              e.preventDefault()
-              setMenu({
-                x: e.clientX,
-                y: e.clientY,
-                items: [{ kind: 'action', label: '+ Nouvelle réunion', onSelect: creerReunion }],
-              })
-            }}
-            // Double-clic sur le fond : création directe, sans passer par le
-            // menu contextuel (§2.7). Le filtre évite qu'un double-clic sur une
-            // ligne crée une réunion par mégarde.
-            onDoubleClick={(e) => {
-              if (surLeFond(e)) creerReunion()
-            }}
-          >
-            {meetings.map((m) => (
-              <li key={m.id} data-ligne>
-                <button
-                  type="button"
-                  onClick={() => choisirReunion(m.id)}
-                  onContextMenu={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    choisirReunion(m.id)
-                    setMenu({
-                      x: e.clientX,
-                      y: e.clientY,
-                      items: [
-                        { kind: 'action', label: '+ Nouvelle réunion', onSelect: creerReunion },
-                        { kind: 'separator' },
-                        { kind: 'action', label: 'Renommer', onSelect: () => renommerReunion(m) },
-                        { kind: 'action', label: 'Supprimer', danger: true, onSelect: () => supprimerReunion(m) },
-                      ],
-                    })
-                  }}
-                  className={`w-full truncate rounded px-2 py-1 text-left text-sm ${
-                    m.id === meetingId ? 'bg-neutral-200' : 'hover:bg-neutral-100'
-                  }`}
-                >
-                  {m.title}
-                </button>
-              </li>
-            ))}
-            {meetings.length === 0 ? (
-              <li className="p-2 text-xs text-neutral-500">Aucune réunion. Double-clic ou clic droit pour en créer une.</li>
-            ) : null}
-          </ul>
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-end border-b border-neutral-200 px-2 py-1">
+              <HiddenToggle montrerCaches={montrerCaches} onToggle={onToggleCaches} />
+            </div>
+            <ul
+              aria-label="Réunions"
+              className="min-h-0 flex-1 overflow-auto p-1"
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  items: [{ kind: 'action', label: '+ Nouvelle réunion', onSelect: creerReunion }],
+                })
+              }}
+              // Double-clic sur le fond : création directe, sans passer par le
+              // menu contextuel (§2.7). Le filtre évite qu'un double-clic sur une
+              // ligne crée une réunion par mégarde.
+              onDoubleClick={(e) => {
+                if (surLeFond(e)) creerReunion()
+              }}
+            >
+              {affichees.map((m) => (
+                <li key={m.id} data-ligne>
+                  <button
+                    type="button"
+                    onClick={() => choisirReunion(m.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      choisirReunion(m.id)
+                      setMenu({
+                        x: e.clientX,
+                        y: e.clientY,
+                        items: [
+                          { kind: 'action', label: '+ Nouvelle réunion', onSelect: creerReunion },
+                          { kind: 'separator' },
+                          { kind: 'action', label: 'Renommer', onSelect: () => renommerReunion(m) },
+                          {
+                            kind: 'action',
+                            label: m.hidden ? 'Réafficher' : 'Cacher',
+                            onSelect: () => basculerCacheReunion(m),
+                          },
+                          { kind: 'action', label: 'Supprimer', danger: true, onSelect: () => supprimerReunion(m) },
+                        ],
+                      })
+                    }}
+                    className={`w-full truncate rounded px-2 py-1 text-left text-sm ${
+                      m.id === meetingId ? 'bg-neutral-200' : 'hover:bg-neutral-100'
+                    } ${m.hidden ? 'italic opacity-50' : ''}`}
+                  >
+                    {m.title}
+                  </button>
+                </li>
+              ))}
+              {affichees.length === 0 ? (
+                <li className="p-2 text-xs text-neutral-500">Aucune réunion. Double-clic ou clic droit pour en créer une.</li>
+              ) : null}
+            </ul>
+          </div>
         }
         second={
           <Split

@@ -134,6 +134,18 @@ export function SearchSemantic(arg1) {
   return window['go']['main']['App']['SearchSemantic'](arg1);
 }
 
+export function SetMeetingHidden(arg1, arg2) {
+  return window['go']['main']['App']['SetMeetingHidden'](arg1, arg2);
+}
+
+export function SetNoteHidden(arg1, arg2) {
+  return window['go']['main']['App']['SetNoteHidden'](arg1, arg2);
+}
+
+export function SetProjectHidden(arg1, arg2) {
+  return window['go']['main']['App']['SetProjectHidden'](arg1, arg2);
+}
+
 export function SetTaskDueDateQuick(arg1, arg2) {
   return window['go']['main']['App']['SetTaskDueDateQuick'](arg1, arg2);
 }
