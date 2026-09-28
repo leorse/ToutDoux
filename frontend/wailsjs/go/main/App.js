@@ -50,6 +50,10 @@ export function GetAllTasks() {
   return window['go']['main']['App']['GetAllTasks']();
 }
 
+export function GetAppInfo() {
+  return window['go']['main']['App']['GetAppInfo']();
+}
+
 export function GetInstances(arg1) {
   return window['go']['main']['App']['GetInstances'](arg1);
 }

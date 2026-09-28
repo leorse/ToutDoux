@@ -1,0 +1,22 @@
+{
+  "releases": [
+    {
+      "version": "1.1.0",
+      "date": "2026-09-28",
+      "changes": [
+        "Le **numéro de version** s'affiche dans la barre de titre de la fenêtre",
+        "Nouvel onglet *À propos* dans les Préférences, avec l'historique des versions",
+        "Les notes et les réunions peuvent s'afficher en **plein écran**, en lecture seule (œil) ou modifiable (agrandir)"
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "date": "2026-08-27",
+      "changes": [
+        "Projets, tâches en arbre, notes et réunions",
+        "Vue **Priorités** et menu dans la barre système",
+        "Recherche par mots-clés et recherche *sémantique* facultative"
+      ]
+    }
+  ]
+}

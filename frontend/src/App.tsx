@@ -10,6 +10,7 @@ import { ProjectSidebar } from './components/ProjectSidebar'
 import { SearchView, type CibleOuverture } from './components/SearchView'
 import { Split } from './components/Split'
 import { FILTRES_PAR_DEFAUT, TasksTab, type Filtres } from './components/TasksTab'
+import { ViewTab } from './components/ViewTab'
 
 /** Vues de premier niveau (§2.11, §2.13). */
 type View = 'projects' | 'priorities' | 'preferences'
@@ -20,9 +21,8 @@ type Tab = 'tasks' | 'notes' | 'meetings'
 /**
  * Coquille de l'application (§2.11).
  *
- * Il n'y a volontairement pas de barre de titre « Tout Doux » en HTML : la
- * fenêtre Wails en fournit une, native. Celle du prototype n'existait que
- * parce qu'il tournait dans un onglet de navigateur.
+ * Le nom et la version de l'application ne s'affichent que dans le titre de la
+ * fenêtre native : aucune barre de titre n'est dessinée ici.
  */
 export default function App() {
   const [view, setView] = useState<View>('projects')
@@ -361,22 +361,6 @@ function TransverseBar({
         </button>
       </div>
     </div>
-  )
-}
-
-function ViewTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={`rounded px-3 py-1 text-sm ${
-        active ? 'bg-[var(--color-selection)] text-white' : 'text-neutral-700 hover:bg-neutral-100'
-      }`}
-    >
-      {label}
-    </button>
   )
 }
 

@@ -29,6 +29,8 @@ export function DeleteTask(arg1:string):Promise<void>;
 
 export function GetAllTasks():Promise<Array<domain.Task>>;
 
+export function GetAppInfo():Promise<main.AppInfo>;
+
 export function GetInstances(arg1:string):Promise<Array<domain.MeetingInstance>>;
 
 export function GetMeetings(arg1:string):Promise<Array<domain.Meeting>>;

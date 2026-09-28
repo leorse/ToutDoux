@@ -429,6 +429,21 @@ export const demoBackend = {
     notes = notes.filter((x) => x.id !== noteId)
   },
 
+  /* -------- À propos -------- */
+
+  GetAppInfo: async () => ({
+    version: '1.1.0',
+    releases: [
+      {
+        version: '1.1.0',
+        date: '2026-09-28',
+        important: 'Démonstration : ce texte est un exemple d’**information importante**.',
+        changes: ['Le **numéro de version** s’affiche dans la barre de titre', 'Nouvel onglet *À propos*'],
+      },
+      { version: '1.0.0', date: '2026-08-27', changes: ['Première version'] },
+    ],
+  }),
+
   /* -------- Recherche sémantique (§2.12) et modèle (§2.13) -------- */
 
   GetModelStatus: async () => ({
