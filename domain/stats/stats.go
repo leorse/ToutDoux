@@ -27,12 +27,22 @@ const (
 type SidebarStats struct {
 	// ActiveCount ne compte que les tâches actives : la v1 affichait le triplet
 	// Total/Complétées/Actives, jugé inutilement verbeux (§2.1).
-	ActiveCount   int     `json:"activeCount"`
-	HasCritical   bool    `json:"hasCritical"`
-	HasHigh       bool    `json:"hasHigh"`
-	DueIcon       DueIcon `json:"dueIcon"`
-	NotesCount    int     `json:"notesCount"`
-	MeetingsCount int     `json:"meetingsCount"`
+	ActiveCount int     `json:"activeCount"`
+	HasCritical bool    `json:"hasCritical"`
+	HasHigh     bool    `json:"hasHigh"`
+	DueIcon     DueIcon `json:"dueIcon"`
+
+	// NotesCount et MeetingsCount ne comptent que les éléments visibles
+	// (§2.1) : le masquage est purement présentatif, mais le compteur affiché
+	// dans la sidebar doit refléter ce que la liste montre par défaut.
+	NotesCount    int `json:"notesCount"`
+	MeetingsCount int `json:"meetingsCount"`
+
+	// HiddenNotesCount et HiddenMeetingsCount comptent les éléments cachés du
+	// projet, indépendamment de l'état des filtres d'affichage : ce sont eux qui
+	// alimentent le « (J) » du compteur `N(J) notes`.
+	HiddenNotesCount    int `json:"hiddenNotesCount"`
+	HiddenMeetingsCount int `json:"hiddenMeetingsCount"`
 }
 
 // Sidebar calcule les compteurs et le code couleur d'un projet (§2.1).
@@ -66,12 +76,22 @@ func Sidebar(tasks []domain.Task, notes []domain.Note, meetings []domain.Meeting
 		s.HasHigh = false
 	}
 	for _, n := range notes {
-		if n.ProjectID == projectID {
+		if n.ProjectID != projectID {
+			continue
+		}
+		if n.Hidden {
+			s.HiddenNotesCount++
+		} else {
 			s.NotesCount++
 		}
 	}
 	for _, m := range meetings {
-		if m.ProjectID == projectID {
+		if m.ProjectID != projectID {
+			continue
+		}
+		if m.Hidden {
+			s.HiddenMeetingsCount++
+		} else {
 			s.MeetingsCount++
 		}
 	}

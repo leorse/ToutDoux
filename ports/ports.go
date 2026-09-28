@@ -34,6 +34,10 @@ type ProjectRepository interface {
 	Create(p domain.Project) error
 	Rename(id, newName string) error
 
+	// SetHidden masque ou réaffiche un projet (§2.1). Purement visuel : ne
+	// touche ni updated_at, ni le contenu, ni aucun index.
+	SetHidden(id string, hidden bool) error
+
 	// Delete supprime le projet et, en cascade, ses tâches, notes, réunions et
 	// instances (§2.1). L'implémentation doit être transactionnelle : une
 	// cascade à moitié appliquée laisserait des orphelins.
@@ -76,6 +80,10 @@ type NoteRepository interface {
 	Create(n domain.Note) error
 	Update(n domain.Note) error
 	Delete(id string) error
+
+	// SetHidden masque ou réaffiche une note (§2.6). Purement visuel : ne
+	// touche ni updated_at, ni le contenu, ni aucun index.
+	SetHidden(id string, hidden bool) error
 }
 
 // MeetingRepository persiste les réunions et leurs instances (§2.7).
@@ -89,6 +97,10 @@ type MeetingRepository interface {
 	Create(m domain.Meeting) error
 	Rename(id, newTitle string) error
 	Delete(id string) error
+
+	// SetHidden masque ou réaffiche une réunion (§2.7). Purement visuel : ne
+	// touche ni updated_at, ni le contenu, ni aucun index.
+	SetHidden(id string, hidden bool) error
 
 	// ListInstances rend les instances d'une réunion, la plus récente d'abord (§2.7).
 	ListInstances(meetingID string) ([]domain.MeetingInstance, error)

@@ -14,12 +14,19 @@ var assets embed.FS
 func main() {
 	app := NewApp()
 
-	err := wails.Run(&options.App{
-		Title: "Tout Doux",
+	// Le nom et la version ne s'affichent que dans la barre de titre native
+	// (§2.11). Une version illisible ne doit pas empêcher de démarrer : le titre
+	// retombe sur le seul nom, et le test du fichier de configuration la signale.
+	title := "Tout Doux"
+	if version, err := versionFromConfig(wailsConfig); err != nil {
+		println("Version :", err.Error())
+	} else {
+		title = windowTitle(version)
+	}
 
-		// La barre de titre est celle du système (§2.11) : le prototype web
-		// portait une barre HTML custom, qui n'existait que parce qu'il tournait
-		// dans un onglet de navigateur. Elle ne doit pas être reprise ici.
+	err := wails.Run(&options.App{
+		Title: title,
+
 		Width:     1280,
 		Height:    800,
 		MinWidth:  900,

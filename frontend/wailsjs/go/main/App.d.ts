@@ -29,6 +29,8 @@ export function DeleteTask(arg1:string):Promise<void>;
 
 export function GetAllTasks():Promise<Array<domain.Task>>;
 
+export function GetAppInfo():Promise<main.AppInfo>;
+
 export function GetInstances(arg1:string):Promise<Array<domain.MeetingInstance>>;
 
 export function GetMeetings(arg1:string):Promise<Array<domain.Meeting>>;
@@ -68,6 +70,12 @@ export function ReparentTask(arg1:string,arg2:string):Promise<Array<domain.Task>
 export function SearchGlobal(arg1:string):Promise<Array<main.SearchResult>>;
 
 export function SearchSemantic(arg1:string):Promise<Array<main.SearchResult>>;
+
+export function SetMeetingHidden(arg1:string,arg2:boolean):Promise<domain.Meeting>;
+
+export function SetNoteHidden(arg1:string,arg2:boolean):Promise<domain.Note>;
+
+export function SetProjectHidden(arg1:string,arg2:boolean):Promise<domain.Project>;
 
 export function SetTaskDueDateQuick(arg1:string,arg2:string):Promise<domain.Task>;
 

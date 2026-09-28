@@ -4,6 +4,7 @@ export namespace domain {
 	    id: string;
 	    projectId: string;
 	    title: string;
+	    hidden: boolean;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -18,6 +19,7 @@ export namespace domain {
 	        this.id = source["id"];
 	        this.projectId = source["projectId"];
 	        this.title = source["title"];
+	        this.hidden = source["hidden"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }
@@ -88,6 +90,7 @@ export namespace domain {
 	    projectId: string;
 	    title: string;
 	    content: string;
+	    hidden: boolean;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -103,6 +106,7 @@ export namespace domain {
 	        this.projectId = source["projectId"];
 	        this.title = source["title"];
 	        this.content = source["content"];
+	        this.hidden = source["hidden"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }
@@ -129,6 +133,7 @@ export namespace domain {
 	    id: string;
 	    name: string;
 	    locked: boolean;
+	    hidden: boolean;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -143,6 +148,7 @@ export namespace domain {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.locked = source["locked"];
+	        this.hidden = source["hidden"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }
@@ -246,6 +252,56 @@ export namespace duedate {
 
 export namespace main {
 	
+	export class Release {
+	    version: string;
+	    date: string;
+	    important?: string;
+	    changes: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Release(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.date = source["date"];
+	        this.important = source["important"];
+	        this.changes = source["changes"];
+	    }
+	}
+	export class AppInfo {
+	    version: string;
+	    releases: Release[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AppInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.releases = this.convertValues(source["releases"], Release);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class CreateTaskResult {
 	    task: domain.Task;
 	    reactivated: domain.Task[];
@@ -310,6 +366,7 @@ export namespace main {
 	        this.dueOnly = source["dueOnly"];
 	    }
 	}
+	
 	export class SearchResult {
 	    type: string;
 	    id: string;
@@ -601,6 +658,8 @@ export namespace stats {
 	    dueIcon: string;
 	    notesCount: number;
 	    meetingsCount: number;
+	    hiddenNotesCount: number;
+	    hiddenMeetingsCount: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new SidebarStats(source);
@@ -614,6 +673,8 @@ export namespace stats {
 	        this.dueIcon = source["dueIcon"];
 	        this.notesCount = source["notesCount"];
 	        this.meetingsCount = source["meetingsCount"];
+	        this.hiddenNotesCount = source["hiddenNotesCount"];
+	        this.hiddenMeetingsCount = source["hiddenMeetingsCount"];
 	    }
 	}
 

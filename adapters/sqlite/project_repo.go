@@ -15,14 +15,14 @@ type ProjectRepository struct{ db *DB }
 // NewProjectRepository câble le repository sur une base ouverte.
 func NewProjectRepository(db *DB) *ProjectRepository { return &ProjectRepository{db: db} }
 
-const projectColumns = `id, name, locked, created_at, updated_at`
+const projectColumns = `id, name, locked, hidden, created_at, updated_at`
 
 func scanProject(s interface{ Scan(...any) error }) (domain.Project, error) {
 	var (
 		p                domain.Project
 		created, updated string
 	)
-	if err := s.Scan(&p.ID, &p.Name, &p.Locked, &created, &updated); err != nil {
+	if err := s.Scan(&p.ID, &p.Name, &p.Locked, &p.Hidden, &created, &updated); err != nil {
 		return domain.Project{}, err
 	}
 	var err error
@@ -68,8 +68,8 @@ func (r *ProjectRepository) Get(id string) (domain.Project, error) {
 // Create insère un projet.
 func (r *ProjectRepository) Create(p domain.Project) error {
 	_, err := r.db.Exec(
-		`INSERT INTO projects (`+projectColumns+`) VALUES (?, ?, ?, ?, ?)`,
-		p.ID, p.Name, p.Locked, formatTime(p.CreatedAt), formatTime(p.UpdatedAt),
+		`INSERT INTO projects (`+projectColumns+`) VALUES (?, ?, ?, ?, ?, ?)`,
+		p.ID, p.Name, p.Locked, p.Hidden, formatTime(p.CreatedAt), formatTime(p.UpdatedAt),
 	)
 	if err != nil {
 		return fmt.Errorf("création du projet : %w", err)
@@ -85,6 +85,18 @@ func (r *ProjectRepository) Rename(id, newName string) error {
 	)
 	if err != nil {
 		return fmt.Errorf("renommage du projet : %w", err)
+	}
+	return checkAffected(res)
+}
+
+// SetHidden masque ou réaffiche un projet (§2.1).
+//
+// N'écrit pas updated_at : masquer n'est pas une modification de contenu, et le
+// laisser inchangé évite de perturber un tri ou un affichage qui en dépendrait.
+func (r *ProjectRepository) SetHidden(id string, hidden bool) error {
+	res, err := r.db.Exec(`UPDATE projects SET hidden = ? WHERE id = ?`, hidden, id)
+	if err != nil {
+		return fmt.Errorf("masquage du projet : %w", err)
 	}
 	return checkAffected(res)
 }

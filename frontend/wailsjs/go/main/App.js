@@ -50,6 +50,10 @@ export function GetAllTasks() {
   return window['go']['main']['App']['GetAllTasks']();
 }
 
+export function GetAppInfo() {
+  return window['go']['main']['App']['GetAppInfo']();
+}
+
 export function GetInstances(arg1) {
   return window['go']['main']['App']['GetInstances'](arg1);
 }
@@ -128,6 +132,18 @@ export function SearchGlobal(arg1) {
 
 export function SearchSemantic(arg1) {
   return window['go']['main']['App']['SearchSemantic'](arg1);
+}
+
+export function SetMeetingHidden(arg1, arg2) {
+  return window['go']['main']['App']['SetMeetingHidden'](arg1, arg2);
+}
+
+export function SetNoteHidden(arg1, arg2) {
+  return window['go']['main']['App']['SetNoteHidden'](arg1, arg2);
+}
+
+export function SetProjectHidden(arg1, arg2) {
+  return window['go']['main']['App']['SetProjectHidden'](arg1, arg2);
 }
 
 export function SetTaskDueDateQuick(arg1, arg2) {

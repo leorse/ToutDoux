@@ -9,5 +9,8 @@
   "author": {
     "name": "Damien MESSNER",
     "email": "damien.messner@gmail.com"
+  },
+  "info": {
+    "productVersion": "1.1.0"
   }
 }

@@ -1,7 +1,9 @@
 import Image from '@tiptap/extension-image'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+
+type ViewMode = 'inline' | 'readonly-full' | 'editable-full'
 
 /** Taille maximale d'une image collée, avant refus (§3.3). */
 const TAILLE_IMAGE_MAX = 10 * 1024 * 1024
@@ -24,6 +26,8 @@ export function RichEditor({
   onBlur?: () => void
   readOnly?: boolean
 }) {
+  const [viewMode, setViewMode] = useState<ViewMode>('inline')
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -96,9 +100,32 @@ export function RichEditor({
     }
   }, [editor, content])
 
+  // Ferme une vue plein écran : l'éditabilité est recalculée depuis le prop
+  // `readOnly` courant, pas depuis une valeur mise en cache lors de
+  // l'ouverture du mode lecture seule (§2.2).
+  function fermerPleinEcran() {
+    editor?.setEditable(!readOnly)
+    setViewMode('inline')
+  }
+
+  // Actif seulement pendant qu'un mode plein écran est ouvert, pour ne pas
+  // interférer avec d'autres gestionnaires d'Échap (ex. ContextMenu) en mode inline.
+  useEffect(() => {
+    if (viewMode === 'inline') return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') fermerPleinEcran()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode])
+
+  const barreOutilsVisible = !readOnly && !!editor && viewMode !== 'readonly-full'
+  const pleinEcran = viewMode !== 'inline'
+
   return (
-    <div className="flex h-full flex-col">
-      {!readOnly && editor ? (
+    <div className={pleinEcran ? 'fixed inset-0 z-50 flex flex-col bg-white' : 'flex h-full flex-col'}>
+      {barreOutilsVisible ? (
         <div role="toolbar" aria-label="Mise en forme" className="flex flex-wrap gap-1 border-b border-neutral-300 px-2 py-1">
           <Outil editor={editor} actif="bold" label="Gras" onClick={() => editor.chain().focus().toggleBold().run()}>
             <strong>G</strong>
@@ -126,6 +153,59 @@ export function RichEditor({
           <Outil editor={editor} actif="link" label="Lien" onClick={() => poserLien(editor)}>
             🔗
           </Outil>
+          <span aria-hidden className="mx-1 h-5 w-px self-center bg-neutral-300" />
+          <button
+            type="button"
+            title="Afficher en plein écran (lecture seule)"
+            aria-label="Afficher en plein écran (lecture seule)"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              editor.setEditable(false)
+              setViewMode('readonly-full')
+            }}
+            className="min-w-7 rounded border border-neutral-300 px-1.5 py-0.5 text-xs"
+          >
+            👁
+          </button>
+          <button
+            type="button"
+            title="Agrandir en plein écran"
+            aria-label="Agrandir en plein écran"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              setViewMode('editable-full')
+            }}
+            className="min-w-7 rounded border border-neutral-300 px-1.5 py-0.5 text-xs"
+          >
+            ⛶
+          </button>
+          {pleinEcran ? (
+            <button
+              type="button"
+              title="Fermer le plein écran"
+              aria-label="Fermer le plein écran"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                fermerPleinEcran()
+              }}
+              className="ml-auto min-w-7 rounded border border-neutral-300 px-1.5 py-0.5 text-xs"
+            >
+              ✕
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {!barreOutilsVisible && viewMode === 'readonly-full' ? (
+        <div className="flex justify-end border-b border-neutral-300 px-2 py-1">
+          <button
+            type="button"
+            title="Fermer le plein écran"
+            aria-label="Fermer le plein écran"
+            onClick={fermerPleinEcran}
+            className="min-w-7 rounded border border-neutral-300 px-1.5 py-0.5 text-xs"
+          >
+            ✕
+          </button>
         </div>
       ) : null}
       <div className="min-h-0 flex-1 overflow-auto">
