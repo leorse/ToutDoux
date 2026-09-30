@@ -35,6 +35,10 @@ export function SearchView({
   onOpen: (cible: CibleOuverture) => void
 }) {
   const [results, setResults] = useState<main.SearchResult[]>([])
+  // Mode dont viennent les résultats affichés, qui peut différer de
+  // `semantique` pendant l'anti-rebond qui suit la bascule : les résultats
+  // mot-clé encore affichés n'ont pas de score à montrer.
+  const [resultatsSemantiques, setResultatsSemantiques] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
   const [indexVide, setIndexVide] = useState(false)
@@ -51,6 +55,7 @@ export function SearchView({
       recherche
         .then((r) => {
           setResults(r)
+          setResultatsSemantiques(semantique)
           setSelectedId((current) => (r.some((x) => x.id === current) ? current : (r[0]?.id ?? null)))
           setErreur(null)
         })
@@ -135,7 +140,7 @@ export function SearchView({
                       onDoubleClick={() => ouvrir(r)}
                       aria-current={r.id === selectedId ? 'true' : undefined}
                       title={
-                        semantique
+                        resultatsSemantiques
                           ? 'Similarité avec la requête. Comparer les lignes entre elles : ' +
                             'sur ce modèle, les valeurs tiennent toutes entre 0,79 et 0,88.'
                           : undefined
@@ -154,14 +159,14 @@ export function SearchView({
                           nombre à comparer aux lignes voisines — l'écart entre
                           deux résultats est ce qui a du sens, pas la valeur
                           absolue (§2.12). */}
-                      {semantique ? (
+                      {resultatsSemantiques ? (
                         <span className="ml-auto shrink-0 font-mono text-xs tabular-nums text-neutral-500">
                           {r.score.toFixed(3)}
                         </span>
                       ) : null}
                       <span
                         className={`shrink-0 rounded bg-neutral-200 px-1.5 py-0.5 text-xs text-neutral-700 ${
-                          semantique ? '' : 'ml-auto'
+                          resultatsSemantiques ? '' : 'ml-auto'
                         }`}
                       >
                         {r.projectName}

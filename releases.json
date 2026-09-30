@@ -1,6 +1,14 @@
 {
   "releases": [
     {
+      "version": "1.1.1",
+      "date": "2026-09-30",
+      "changes": [
+        "Enregistrer le compte rendu d'une réunion ne fait plus **sauter la sélection** sur la première réunion : on reste dans l'éditeur",
+        "Les boutons de mise en forme (*gras*, *italique*…) suivent désormais le **curseur**, sans avoir à taper"
+      ]
+    },
+    {
       "version": "1.1.0",
       "date": "2026-09-28",
       "changes": [

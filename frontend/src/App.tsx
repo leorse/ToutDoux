@@ -56,6 +56,12 @@ export default function App() {
     (liste: keyof typeof cachesVisibles) => setCachesVisibles((c) => (c[liste] ? c : { ...c, [liste]: true })),
     [],
   )
+  // Rappels stables pour les onglets : un rappel recréé à chaque rendu d'App —
+  // donc à chaque sauvegarde — relançait l'effet de chargement de l'onglet
+  // Réunions, qui resélectionnait la première réunion (correctif 1.1.1).
+  const basculerNotesCachees = useCallback(() => basculerCaches('notes'), [basculerCaches])
+  const basculerReunionsCachees = useCallback(() => basculerCaches('reunions'), [basculerCaches])
+  const revelerReunions = useCallback(() => reveler('reunions'), [reveler])
 
   // Élément à ouvrir après une navigation depuis Priorités ou la Recherche.
   const [cible, setCible] = useState<CibleOuverture | null>(null)
@@ -273,10 +279,10 @@ export default function App() {
                 onDataChanged={signalerChangement}
                 cible={cible}
                 montrerNotesCachees={cachesVisibles.notes}
-                onToggleNotesCachees={() => basculerCaches('notes')}
+                onToggleNotesCachees={basculerNotesCachees}
                 montrerReunionsCachees={cachesVisibles.reunions}
-                onToggleReunionsCachees={() => basculerCaches('reunions')}
-                onRevelerReunionCachee={() => reveler('reunions')}
+                onToggleReunionsCachees={basculerReunionsCachees}
+                onRevelerReunionCachee={revelerReunions}
               />
             }
           />

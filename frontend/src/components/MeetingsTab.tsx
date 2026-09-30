@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { dateInstance } from '../dates'
 import { surLeFond } from '../fond'
@@ -51,15 +51,26 @@ export function MeetingsTab({
     return liste
   }, [projectId])
 
+  // Le rappel passe par une ref et reste hors des dépendances de l'effet de
+  // chargement : si le parent le recrée à chaque rendu — donc à chaque
+  // sauvegarde, via `onDataChanged` —, l'effet repartirait et resélectionnerait
+  // la première réunion en pleine édition (correctif 1.1.1). Déclaré avant
+  // l'effet de chargement, cet effet s'exécute avant lui.
+  const onRevelerCacheeRef = useRef(onRevelerCachee)
+  useEffect(() => {
+    onRevelerCacheeRef.current = onRevelerCachee
+  }, [onRevelerCachee])
+
+  // Ne repart qu'au changement de projet ou de cible de navigation.
   useEffect(() => {
     chargerReunions().then((liste) => {
       const cible = cibleInstance?.meetingId ? liste.find((m) => m.id === cibleInstance.meetingId) : undefined
       // La réunion visée par la recherche ou les Priorités doit rester
       // joignable même si elle est cachée : son œil s'ouvre (§2.7).
-      if (cible?.hidden) onRevelerCachee()
+      if (cible?.hidden) onRevelerCacheeRef.current()
       setMeetingId(cibleInstance?.meetingId ?? liste[0]?.id ?? null)
     })
-  }, [chargerReunions, cibleInstance?.meetingId, onRevelerCachee])
+  }, [chargerReunions, cibleInstance?.meetingId])
 
   // Si la réunion sélectionnée sort de la liste affichée — supprimée, cachée,
   // ou œil qui se referme dessus —, la sélection retombe sur la première

@@ -1,5 +1,5 @@
 import Image from '@tiptap/extension-image'
-import { EditorContent, useEditor } from '@tiptap/react'
+import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useState } from 'react'
 
@@ -90,6 +90,24 @@ export function RichEditor({
     },
   })
 
+  // État « enfoncé » des boutons, recalculé à chaque transaction — y compris un
+  // simple déplacement du curseur. TipTap 3 ne relance pas le rendu sur une
+  // transaction ; sans cet abonnement, la barre ne suivait qu'à la frappe
+  // (correctif 1.1.1). Le rendu ne repart que si l'un des booléens change.
+  const actifs = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({
+      bold: !!e?.isActive('bold'),
+      italic: !!e?.isActive('italic'),
+      strike: !!e?.isActive('strike'),
+      heading: !!e?.isActive('heading', { level: 2 }),
+      bulletList: !!e?.isActive('bulletList'),
+      orderedList: !!e?.isActive('orderedList'),
+      codeBlock: !!e?.isActive('codeBlock'),
+      link: !!e?.isActive('link'),
+    }),
+  })
+
   // Quand on change de note, TipTap garde le document précédent : il faut le
   // remplacer explicitement. `emitUpdate: false` évite que ce remplacement soit
   // pris pour une frappe de l'utilisateur et déclenche une sauvegarde — ce qui
@@ -127,30 +145,30 @@ export function RichEditor({
     <div className={pleinEcran ? 'fixed inset-0 z-50 flex flex-col bg-white' : 'flex h-full flex-col'}>
       {barreOutilsVisible ? (
         <div role="toolbar" aria-label="Mise en forme" className="flex flex-wrap gap-1 border-b border-neutral-300 px-2 py-1">
-          <Outil editor={editor} actif="bold" label="Gras" onClick={() => editor.chain().focus().toggleBold().run()}>
+          <Outil pressed={!!actifs?.bold} label="Gras" onClick={() => editor.chain().focus().toggleBold().run()}>
             <strong>G</strong>
           </Outil>
-          <Outil editor={editor} actif="italic" label="Italique" onClick={() => editor.chain().focus().toggleItalic().run()}>
+          <Outil pressed={!!actifs?.italic} label="Italique" onClick={() => editor.chain().focus().toggleItalic().run()}>
             <em>I</em>
           </Outil>
-          <Outil editor={editor} actif="strike" label="Barré" onClick={() => editor.chain().focus().toggleStrike().run()}>
+          <Outil pressed={!!actifs?.strike} label="Barré" onClick={() => editor.chain().focus().toggleStrike().run()}>
             <s>S</s>
           </Outil>
           <span aria-hidden className="mx-1 h-5 w-px self-center bg-neutral-300" />
-          <Outil editor={editor} actif="heading" attrs={{ level: 2 }} label="Titre" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
+          <Outil pressed={!!actifs?.heading} label="Titre" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
             T
           </Outil>
-          <Outil editor={editor} actif="bulletList" label="Liste à puces" onClick={() => editor.chain().focus().toggleBulletList().run()}>
+          <Outil pressed={!!actifs?.bulletList} label="Liste à puces" onClick={() => editor.chain().focus().toggleBulletList().run()}>
             •
           </Outil>
-          <Outil editor={editor} actif="orderedList" label="Liste numérotée" onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+          <Outil pressed={!!actifs?.orderedList} label="Liste numérotée" onClick={() => editor.chain().focus().toggleOrderedList().run()}>
             1.
           </Outil>
-          <Outil editor={editor} actif="codeBlock" label="Bloc de code" onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
+          <Outil pressed={!!actifs?.codeBlock} label="Bloc de code" onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
             {'</>'}
           </Outil>
           <span aria-hidden className="mx-1 h-5 w-px self-center bg-neutral-300" />
-          <Outil editor={editor} actif="link" label="Lien" onClick={() => poserLien(editor)}>
+          <Outil pressed={!!actifs?.link} label="Lien" onClick={() => poserLien(editor)}>
             🔗
           </Outil>
           <span aria-hidden className="mx-1 h-5 w-px self-center bg-neutral-300" />
@@ -226,18 +244,14 @@ function poserLien(editor: NonNullable<ReturnType<typeof useEditor>>) {
   editor.chain().focus().setLink({ href: url.trim() }).run()
 }
 
-/** Bouton de la barre d'outils, dont l'état actif suit la sélection courante. */
+/** Bouton de la barre d'outils ; `pressed` vient de l'état de l'éditeur à la sélection courante. */
 function Outil({
-  editor,
-  actif,
-  attrs,
+  pressed,
   label,
   onClick,
   children,
 }: {
-  editor: NonNullable<ReturnType<typeof useEditor>>
-  actif: string
-  attrs?: Record<string, unknown>
+  pressed: boolean
   label: string
   onClick: () => void
   children: React.ReactNode
@@ -247,7 +261,7 @@ function Outil({
       type="button"
       title={label}
       aria-label={label}
-      aria-pressed={editor.isActive(actif, attrs)}
+      aria-pressed={pressed}
       // `onMouseDown` plutôt que `onClick` : sans cela le bouton vole le focus
       // à l'éditeur, la sélection se perd et la commande s'applique dans le vide.
       onMouseDown={(e) => {
@@ -255,7 +269,7 @@ function Outil({
         onClick()
       }}
       className={`min-w-7 rounded px-1.5 py-0.5 text-xs ${
-        editor.isActive(actif, attrs) ? 'border-2 border-neutral-900' : 'border border-neutral-300'
+        pressed ? 'border-2 border-neutral-900' : 'border border-neutral-300'
       }`}
     >
       {children}
