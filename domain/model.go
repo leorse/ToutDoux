@@ -97,13 +97,27 @@ func (t Task) Active() bool { return !t.Completed && !t.Cancelled }
 
 // Note est une note de projet (§2.6).
 type Note struct {
+	ID        string `json:"id"`
+	ProjectID string `json:"projectId"`
+	Title     string `json:"title"`
+	Content   string `json:"content"`
+	Hidden    bool   `json:"hidden"`
+	Color     string `json:"color"`
+	// GroupID est nil pour une note hors groupe. OrderIndex range les notes
+	// d'un projet ; les notes d'un même groupe y sont contiguës.
+	GroupID    *string   `json:"groupId"`
+	OrderIndex int       `json:"orderIndex"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+
+// NoteGroup est un groupe nommé de notes d'un même projet. Il n'existe que
+// tant qu'il contient au moins une note.
+type NoteGroup struct {
 	ID        string    `json:"id"`
 	ProjectID string    `json:"projectId"`
-	Title     string    `json:"title"`
-	Content   string    `json:"content"`
-	Hidden    bool      `json:"hidden"`
+	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // Meeting est une réunion, rattachée à un projet (§2.7).
@@ -112,8 +126,31 @@ type Meeting struct {
 	ProjectID string    `json:"projectId"`
 	Title     string    `json:"title"`
 	Hidden    bool      `json:"hidden"`
+	Color     string    `json:"color"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// ItemColors est la palette des notes et des réunions : dix pastels,
+// désignés par une clé. La teinte de chaque clé appartient à l'interface ; ici
+// on ne garantit que l'appartenance à la palette. La chaîne vide — aucune
+// couleur — n'en fait pas partie mais est toujours acceptée.
+var ItemColors = []string{
+	"rose", "peche", "jaune", "anis", "menthe",
+	"turquoise", "ciel", "lavande", "lilas", "sable",
+}
+
+// ValidItemColor dit si c est une clé de la palette, ou l'absence de couleur.
+func ValidItemColor(c string) bool {
+	if c == "" {
+		return true
+	}
+	for _, k := range ItemColors {
+		if k == c {
+			return true
+		}
+	}
+	return false
 }
 
 // IndexEntry est une entrée de l'index plein texte (§3.2).

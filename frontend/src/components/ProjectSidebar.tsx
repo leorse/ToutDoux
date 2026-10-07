@@ -241,11 +241,16 @@ function compteurs(counts: stats.SidebarStats): string {
 /**
  * Couleur de fond d'un projet (§2.1).
  *
- * « Transverse / Divers » est en gris fixe, sans logique de criticité et sans
- * icône cadenas : le style grisé suffit à signaler qu'il est spécial.
+ * « Transverse / Divers » est gris, sans icône cadenas : le style grisé suffit
+ * à signaler qu'il est spécial. Depuis la v1.2.0 il suit lui aussi la criticité
+ * de ses tâches, mais dans des teintes atténuées qui restent dans ses gris.
  */
 function background(project: domain.Project, counts: stats.SidebarStats | null): string {
-  if (project.locked) return 'bg-[var(--color-annulee)]'
+  if (project.locked) {
+    if (counts?.hasCritical) return 'bg-[var(--color-critique-attenuee)]'
+    if (counts?.hasHigh) return 'bg-[var(--color-haute-attenuee)]'
+    return 'bg-[var(--color-annulee)]'
+  }
   if (counts?.hasCritical) return 'bg-[var(--color-critique)]'
   if (counts?.hasHigh) return 'bg-[var(--color-haute)]'
   return 'bg-white'

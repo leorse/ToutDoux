@@ -1,30 +1,40 @@
 {
   "releases": [
     {
+      "version": "1.2.0",
+      "date": "2026-10-07",
+      "changes": [
+        { "type": "ajout", "level": "majeur", "text": "Les notes se **regroupent** (sélection par *Ctrl+clic* ou *Maj+clic*, clic droit, *Regrouper*) et se **rangent à la main** par glisser-déposer : modifier une note ne la fait plus remonter en tête. Un groupe se déplace par son bandeau, se renomme et se dissout au clic droit" },
+        { "type": "ajout", "level": "majeur", "text": "Les notes et les réunions peuvent recevoir une **couleur**, choisie parmi dix pastels depuis la barre de l'éditeur" },
+        { "type": "correction", "level": "mineur", "text": "Le projet *Transverse / Divers* se teinte, de façon atténuée, quand il contient une tâche critique ou haute" },
+        { "type": "correction", "level": "mineur", "text": "Une tâche terminée n'affiche plus son échéance, ni un retard qui n'en est plus un" }
+      ]
+    },
+    {
       "version": "1.1.1",
       "date": "2026-09-30",
       "changes": [
-        "Enregistrer le compte rendu d'une réunion ne fait plus **sauter la sélection** sur la première réunion : on reste dans l'éditeur",
-        "Les boutons de mise en forme (*gras*, *italique*…) suivent désormais le **curseur**, sans avoir à taper"
+        { "type": "correction", "level": "majeur", "text": "Enregistrer le compte rendu d'une réunion ne fait plus **sauter la sélection** sur la première réunion : on reste dans l'éditeur" },
+        { "type": "correction", "level": "mineur", "text": "Les boutons de mise en forme (*gras*, *italique*…) suivent désormais le **curseur**, sans avoir à taper" }
       ]
     },
     {
       "version": "1.1.0",
       "date": "2026-09-28",
       "changes": [
-        "Le **numéro de version** s'affiche dans la barre de titre de la fenêtre",
-        "Nouvel onglet *À propos* dans les Préférences, avec l'historique des versions",
-        "Les notes et les réunions peuvent s'afficher en **plein écran**, en lecture seule (œil) ou modifiable (agrandir)",
-        "Les projets, notes et réunions obsolètes peuvent être **cachés**, et retrouvés via l'œil de chaque liste"
+        { "type": "ajout", "level": "mineur", "text": "Le **numéro de version** s'affiche dans la barre de titre de la fenêtre" },
+        { "type": "ajout", "level": "mineur", "text": "Nouvel onglet *À propos* dans les Préférences, avec l'historique des versions" },
+        { "type": "ajout", "level": "majeur", "text": "Les notes et les réunions peuvent s'afficher en **plein écran**, en lecture seule (œil) ou modifiable (agrandir)" },
+        { "type": "ajout", "level": "majeur", "text": "Les projets, notes et réunions obsolètes peuvent être **cachés**, et retrouvés via l'œil de chaque liste" }
       ]
     },
     {
       "version": "1.0.0",
       "date": "2026-08-27",
       "changes": [
-        "Projets, tâches en arbre, notes et réunions",
-        "Vue **Priorités** et menu dans la barre système",
-        "Recherche par mots-clés et recherche *sémantique* facultative"
+        { "type": "ajout", "level": "majeur", "text": "Projets, tâches en arbre, notes et réunions" },
+        { "type": "ajout", "level": "majeur", "text": "Vue **Priorités** et menu dans la barre système" },
+        { "type": "ajout", "level": "majeur", "text": "Recherche par mots-clés et recherche *sémantique* facultative" }
       ]
     }
   ]

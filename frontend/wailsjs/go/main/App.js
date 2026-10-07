@@ -46,6 +46,10 @@ export function DeleteTask(arg1) {
   return window['go']['main']['App']['DeleteTask'](arg1);
 }
 
+export function DissolveNoteGroup(arg1) {
+  return window['go']['main']['App']['DissolveNoteGroup'](arg1);
+}
+
 export function GetAllTasks() {
   return window['go']['main']['App']['GetAllTasks']();
 }
@@ -64,6 +68,10 @@ export function GetMeetings(arg1) {
 
 export function GetModelStatus() {
   return window['go']['main']['App']['GetModelStatus']();
+}
+
+export function GetNoteGroups(arg1) {
+  return window['go']['main']['App']['GetNoteGroups'](arg1);
 }
 
 export function GetNotes(arg1) {
@@ -88,6 +96,10 @@ export function GetTaskView(arg1, arg2) {
 
 export function GetTasks(arg1) {
   return window['go']['main']['App']['GetTasks'](arg1);
+}
+
+export function GroupNotes(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GroupNotes'](arg1, arg2, arg3);
 }
 
 export function IsInSemanticIndex(arg1) {
@@ -118,6 +130,10 @@ export function RenameMeeting(arg1, arg2) {
   return window['go']['main']['App']['RenameMeeting'](arg1, arg2);
 }
 
+export function RenameNoteGroup(arg1, arg2) {
+  return window['go']['main']['App']['RenameNoteGroup'](arg1, arg2);
+}
+
 export function RenameProject(arg1, arg2) {
   return window['go']['main']['App']['RenameProject'](arg1, arg2);
 }
@@ -134,12 +150,24 @@ export function SearchSemantic(arg1) {
   return window['go']['main']['App']['SearchSemantic'](arg1);
 }
 
+export function SetMeetingColor(arg1, arg2) {
+  return window['go']['main']['App']['SetMeetingColor'](arg1, arg2);
+}
+
 export function SetMeetingHidden(arg1, arg2) {
   return window['go']['main']['App']['SetMeetingHidden'](arg1, arg2);
 }
 
+export function SetNoteColor(arg1, arg2) {
+  return window['go']['main']['App']['SetNoteColor'](arg1, arg2);
+}
+
 export function SetNoteHidden(arg1, arg2) {
   return window['go']['main']['App']['SetNoteHidden'](arg1, arg2);
+}
+
+export function SetNotesLayout(arg1, arg2) {
+  return window['go']['main']['App']['SetNotesLayout'](arg1, arg2);
 }
 
 export function SetProjectHidden(arg1, arg2) {

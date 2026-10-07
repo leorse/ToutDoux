@@ -57,6 +57,18 @@ func (a *App) SetMeetingHidden(meetingID string, hidden bool) (domain.Meeting, e
 	return a.meetings.Get(meetingID)
 }
 
+// SetMeetingColor pose ou retire (chaîne vide) la couleur d'une réunion. Elle
+// porte sur la réunion seule : ses instances n'ont pas de couleur.
+func (a *App) SetMeetingColor(meetingID string, color string) (domain.Meeting, error) {
+	if !domain.ValidItemColor(color) {
+		return domain.Meeting{}, domain.ErrInvalidColor
+	}
+	if err := a.meetings.SetColor(meetingID, color); err != nil {
+		return domain.Meeting{}, err
+	}
+	return a.meetings.Get(meetingID)
+}
+
 // DeleteMeeting supprime une réunion et ses instances (§2.7).
 func (a *App) DeleteMeeting(meetingID string) error {
 	instances, err := a.meetings.ListInstances(meetingID)

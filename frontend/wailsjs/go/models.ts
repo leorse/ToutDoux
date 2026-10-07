@@ -5,6 +5,7 @@ export namespace domain {
 	    projectId: string;
 	    title: string;
 	    hidden: boolean;
+	    color: string;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -20,6 +21,7 @@ export namespace domain {
 	        this.projectId = source["projectId"];
 	        this.title = source["title"];
 	        this.hidden = source["hidden"];
+	        this.color = source["color"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }
@@ -91,6 +93,9 @@ export namespace domain {
 	    title: string;
 	    content: string;
 	    hidden: boolean;
+	    color: string;
+	    groupId?: string;
+	    orderIndex: number;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -107,8 +112,48 @@ export namespace domain {
 	        this.title = source["title"];
 	        this.content = source["content"];
 	        this.hidden = source["hidden"];
+	        this.color = source["color"];
+	        this.groupId = source["groupId"];
+	        this.orderIndex = source["orderIndex"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class NoteGroup {
+	    id: string;
+	    projectId: string;
+	    name: string;
+	    // Go type: time
+	    createdAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new NoteGroup(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.projectId = source["projectId"];
+	        this.name = source["name"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -252,11 +297,27 @@ export namespace duedate {
 
 export namespace main {
 	
+	export class Change {
+	    type: string;
+	    level: string;
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Change(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.level = source["level"];
+	        this.text = source["text"];
+	    }
+	}
 	export class Release {
 	    version: string;
 	    date: string;
 	    important?: string;
-	    changes: string[];
+	    changes: Change[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Release(source);
@@ -267,8 +328,26 @@ export namespace main {
 	        this.version = source["version"];
 	        this.date = source["date"];
 	        this.important = source["important"];
-	        this.changes = source["changes"];
+	        this.changes = this.convertValues(source["changes"], Change);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class AppInfo {
 	    version: string;
@@ -302,6 +381,7 @@ export namespace main {
 		    return a;
 		}
 	}
+	
 	export class CreateTaskResult {
 	    task: domain.Task;
 	    reactivated: domain.Task[];
@@ -558,6 +638,25 @@ export namespace model {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace notelayout {
+	
+	export class Item {
+	    noteId: string;
+	    groupId: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Item(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.noteId = source["noteId"];
+	        this.groupId = source["groupId"];
+	    }
 	}
 
 }

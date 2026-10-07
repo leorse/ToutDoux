@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestWindowTitle(t *testing.T) {
 	if got, want := windowTitle("1.0.1"), "Tout Doux (1.0.1)"; got != want {
@@ -58,8 +61,12 @@ func TestEmbeddedReleasesMatchVersion(t *testing.T) {
 }
 
 func TestCheckReleases(t *testing.T) {
-	ok := Release{Version: "1.0.1", Date: "2026-09-25", Changes: []string{"Une modification"}}
-	ancienne := Release{Version: "1.0.0", Date: "2026-08-27", Changes: []string{"Départ"}}
+	ajout := Change{Type: "ajout", Level: "majeur", Text: "Une modification"}
+	ok := Release{Version: "1.0.1", Date: "2026-09-25", Changes: []Change{ajout}}
+	ancienne := Release{Version: "1.0.0", Date: "2026-08-27", Changes: []Change{{Type: "correction", Level: "mineur", Text: "Départ"}}}
+	avec := func(c Change) []Release {
+		return []Release{{Version: "1.0.1", Date: "2026-09-25", Changes: []Change{ajout, c}}}
+	}
 
 	cas := []struct {
 		nom      string
@@ -73,7 +80,12 @@ func TestCheckReleases(t *testing.T) {
 		{"date invalide", "1.0.1", []Release{{Version: "1.0.1", Date: "25/09/2026", Changes: ok.Changes}}, true},
 		{"version mal formée", "1.0.1", []Release{ok, {Version: "1.0", Date: "2026-08-27", Changes: ancienne.Changes}}, true},
 		{"aucune modification", "1.0.1", []Release{{Version: "1.0.1", Date: "2026-09-25"}}, true},
-		{"modification vide", "1.0.1", []Release{{Version: "1.0.1", Date: "2026-09-25", Changes: []string{"  "}}}, true},
+		{"modification vide", "1.0.1", avec(Change{Type: "ajout", Level: "mineur", Text: "  "}), true},
+		{"nature inconnue", "1.0.1", avec(Change{Type: "évolution", Level: "mineur", Text: "x"}), true},
+		{"nature absente", "1.0.1", avec(Change{Level: "mineur", Text: "x"}), true},
+		{"portée inconnue", "1.0.1", avec(Change{Type: "correction", Level: "moyen", Text: "x"}), true},
+		{"portée absente", "1.0.1", avec(Change{Type: "correction", Text: "x"}), true},
+		{"correction mineure", "1.0.1", avec(Change{Type: "correction", Level: "mineur", Text: "x"}), false},
 	}
 	for _, c := range cas {
 		t.Run(c.nom, func(t *testing.T) {
@@ -81,6 +93,25 @@ func TestCheckReleases(t *testing.T) {
 				t.Fatalf("erreur = %v, wantErr %v", err, c.wantErr)
 			}
 		})
+	}
+}
+
+// L'erreur doit dire quelle version corriger : l'historique grossit, et un
+// message sans repère obligerait à relire tout le fichier.
+func TestCheckReleases_NamesTheRelease(t *testing.T) {
+	releases := []Release{{Version: "1.0.1", Date: "2026-09-25", Changes: []Change{{Type: "bug", Level: "mineur", Text: "x"}}}}
+	err := checkReleases("1.0.1", releases)
+	if err == nil || !strings.Contains(err.Error(), "1.0.1") {
+		t.Errorf("erreur = %v, attendu une erreur citant la version 1.0.1", err)
+	}
+}
+
+// Une entrée restée à l'ancien format — une simple chaîne — ne doit pas être
+// affichée sans catégorie : elle est refusée à la lecture.
+func TestParseReleases_RejectsUncategorisedChange(t *testing.T) {
+	raw := []byte(`{"releases":[{"version":"1.0.0","date":"2026-01-01","changes":["texte nu"]}]}`)
+	if _, err := parseReleases(raw); err == nil {
+		t.Error("une modification sans nature ni portée aurait dû être refusée")
 	}
 }
 

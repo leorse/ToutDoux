@@ -10,6 +10,11 @@
   --color-basse: #d9d9d9;
   --color-completee: #d7f5dd;
   --color-annulee: #d9d9d9;
+  /* Projet « Transverse / Divers » portant une tâche critique ou haute : 35 %
+     de la couleur, 65 % de son gris. Assez pour alerter, pas assez pour le
+     confondre avec un projet ordinaire. */
+  --color-critique-attenuee: #e6a8a8;
+  --color-haute-attenuee: #e6cda8;
   --color-selection: #166534;
 }
 

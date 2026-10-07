@@ -137,22 +137,24 @@ export function TaskDetail({ task, due, readOnly, onPatch, onQuickDue, onSetDue 
             className="rounded border border-neutral-300 px-2 py-1 text-xs"
           />
 
+          {/* Pas de délai pour une tâche terminée ou annulée : le backend n'en
+              fournit plus (v1.2.0). La date, elle, reste — et reste retirable. */}
           {due ? (
-            <>
-              <span className="text-xs text-neutral-600">
-                <span aria-hidden>{due.urgent || due.overdue ? '⏰' : '🕐'}</span> {due.text}
-              </span>
-              {/* Croix rouge et non un lien « Retirer » (§2.3). */}
-              <button
-                type="button"
-                disabled={readOnly}
-                onClick={() => onPatch({ clearDue: true })}
-                aria-label="Retirer l’échéance"
-                className="flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-xs leading-none text-white hover:bg-red-700 disabled:opacity-40"
-              >
-                ✕
-              </button>
-            </>
+            <span className="text-xs text-neutral-600">
+              <span aria-hidden>{due.urgent || due.overdue ? '⏰' : '🕐'}</span> {due.text}
+            </span>
+          ) : null}
+          {task.dueDate ? (
+            // Croix rouge et non un lien « Retirer » (§2.3).
+            <button
+              type="button"
+              disabled={readOnly}
+              onClick={() => onPatch({ clearDue: true })}
+              aria-label="Retirer l’échéance"
+              className="flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-xs leading-none text-white hover:bg-red-700 disabled:opacity-40"
+            >
+              ✕
+            </button>
           ) : null}
         </div>
       </fieldset>

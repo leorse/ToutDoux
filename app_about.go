@@ -50,13 +50,31 @@ func windowTitle(version string) string {
 //go:embed releases.json
 var releasesFile []byte
 
+// Nature et portée d'un changement, telles qu'écrites dans releases.json.
+const (
+	ChangeAjout      = "ajout"
+	ChangeCorrection = "correction"
+
+	LevelMajeur = "majeur"
+	LevelMineur = "mineur"
+)
+
+// Change est une ligne de l'historique : un ajout ou une correction, majeur ou
+// mineur. L'onglet « À propos » range les changements d'une version selon ces
+// deux axes.
+type Change struct {
+	Type  string `json:"type"`
+	Level string `json:"level"`
+	Text  string `json:"text"`
+}
+
 // Release est une entrée de l'historique. Important est facultatif : un encadré
 // mis en tête de la version, pour ce qu'il ne faut pas rater.
 type Release struct {
 	Version   string   `json:"version"`
 	Date      string   `json:"date"`
 	Important string   `json:"important,omitempty"`
-	Changes   []string `json:"changes"`
+	Changes   []Change `json:"changes"`
 }
 
 // AppInfo est ce que l'onglet « À propos » affiche.
@@ -96,8 +114,16 @@ func checkReleases(version string, releases []Release) error {
 			return fmt.Errorf("version %s : aucune modification listée", r.Version)
 		}
 		for _, c := range r.Changes {
-			if strings.TrimSpace(c) == "" {
+			if strings.TrimSpace(c.Text) == "" {
 				return fmt.Errorf("version %s : une modification est vide", r.Version)
+			}
+			if c.Type != ChangeAjout && c.Type != ChangeCorrection {
+				return fmt.Errorf("version %s : nature %q inconnue pour « %s », %q ou %q attendu",
+					r.Version, c.Type, c.Text, ChangeAjout, ChangeCorrection)
+			}
+			if c.Level != LevelMajeur && c.Level != LevelMineur {
+				return fmt.Errorf("version %s : portée %q inconnue pour « %s », %q ou %q attendu",
+					r.Version, c.Level, c.Text, LevelMajeur, LevelMineur)
 			}
 		}
 	}

@@ -33,12 +33,13 @@ type App struct {
 	ctx context.Context
 	db  *sqlite.DB
 
-	projects ports.ProjectRepository
-	tasks    ports.TaskRepository
-	notes    ports.NoteRepository
-	meetings ports.MeetingRepository
-	index    ports.SearchIndex
-	clock    ports.Clock
+	projects   ports.ProjectRepository
+	tasks      ports.TaskRepository
+	notes      ports.NoteRepository
+	noteGroups ports.NoteGroupRepository
+	meetings   ports.MeetingRepository
+	index      ports.SearchIndex
+	clock      ports.Clock
 
 	// Recherche sémantique (§2.12). Optionnelle : sans modèle déposé, embedder
 	// répond « indisponible » et le reste de l'application fonctionne
@@ -80,6 +81,7 @@ func newAppWithDB(db *sqlite.DB, clock ports.Clock) *App {
 		projects:   sqlite.NewProjectRepository(db),
 		tasks:      sqlite.NewTaskRepository(db),
 		notes:      sqlite.NewNoteRepository(db),
+		noteGroups: sqlite.NewNoteGroupRepository(db),
 		meetings:   sqlite.NewMeetingRepository(db),
 		index:      sqlite.NewSearchIndexAdapter(db),
 		embeddings: sqlite.NewEmbeddingRepository(db),
@@ -114,6 +116,7 @@ func (a *App) startup(ctx context.Context) {
 	a.projects = sqlite.NewProjectRepository(db)
 	a.tasks = sqlite.NewTaskRepository(db)
 	a.notes = sqlite.NewNoteRepository(db)
+	a.noteGroups = sqlite.NewNoteGroupRepository(db)
 	a.meetings = sqlite.NewMeetingRepository(db)
 	a.index = sqlite.NewSearchIndexAdapter(db)
 	a.embeddings = sqlite.NewEmbeddingRepository(db)
@@ -407,6 +410,11 @@ func (a *App) GetTaskView(projectID string, filters FilterSelection) (TaskView, 
 		view.DefaultExpanded = append(view.DefaultExpanded, id)
 	}
 	for _, t := range tasks {
+		// Une tâche terminée ou annulée n'affiche plus de délai : sans cela,
+		// une tâche finie dans les temps passerait « en retard » avec les jours.
+		if !t.Active() {
+			continue
+		}
 		if info := duedate.Format(t.DueDate, now); info != nil {
 			view.Due[t.ID] = info
 		}
@@ -692,12 +700,12 @@ func (a *App) DeleteTask(taskID string) error {
 
 /* ---------------- Notes (§2.6) ---------------- */
 
-// GetNotes rend les notes d'un projet.
+// GetNotes rend les notes d'un projet, dans l'ordre choisi par l'utilisateur.
 func (a *App) GetNotes(projectID string) ([]domain.Note, error) {
 	return a.notes.ListByProject(projectID)
 }
 
-// CreateNote crée une note vide dans un projet.
+// CreateNote crée une note vide dans un projet, en tête de liste et hors groupe.
 func (a *App) CreateNote(projectID, title string) (domain.Note, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
@@ -709,6 +717,11 @@ func (a *App) CreateNote(projectID, title string) (domain.Note, error) {
 	now := a.clock.Now()
 	n := domain.Note{ID: uuid.NewString(), ProjectID: projectID, Title: title, CreatedAt: now, UpdatedAt: now}
 	if err := a.notes.Create(n); err != nil {
+		return domain.Note{}, err
+	}
+	// Relue pour porter la position que le repository lui a donnée.
+	n, err := a.notes.Get(n.ID)
+	if err != nil {
 		return domain.Note{}, err
 	}
 	return n, a.indexNote(n)
@@ -749,7 +762,19 @@ func (a *App) SetNoteHidden(noteID string, hidden bool) (domain.Note, error) {
 	return a.notes.Get(noteID)
 }
 
-// DeleteNote supprime une note.
+// SetNoteColor pose ou retire (chaîne vide) la couleur d'une note. Purement
+// visuel : ni le contenu, ni la place dans la liste, ni la recherche ne changent.
+func (a *App) SetNoteColor(noteID string, color string) (domain.Note, error) {
+	if !domain.ValidItemColor(color) {
+		return domain.Note{}, domain.ErrInvalidColor
+	}
+	if err := a.notes.SetColor(noteID, color); err != nil {
+		return domain.Note{}, err
+	}
+	return a.notes.Get(noteID)
+}
+
+// DeleteNote supprime une note. Son groupe disparaît si elle en était la dernière.
 func (a *App) DeleteNote(noteID string) error {
 	if err := a.notes.Delete(noteID); err != nil {
 		return err

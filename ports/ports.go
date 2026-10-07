@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"toutdoux/domain"
+	"toutdoux/domain/notelayout"
 )
 
 // Clock rend l'heure courante.
@@ -84,6 +85,25 @@ type NoteRepository interface {
 	// SetHidden masque ou réaffiche une note (§2.6). Purement visuel : ne
 	// touche ni updated_at, ni le contenu, ni aucun index.
 	SetHidden(id string, hidden bool) error
+
+	// SetColor pose ou retire (chaîne vide) la couleur d'une note. Purement
+	// visuel, comme SetHidden.
+	SetColor(id string, color string) error
+
+	// SaveLayout réécrit l'ordre et l'appartenance aux groupes de toutes les
+	// notes d'un projet, puis supprime les groupes du projet restés sans note.
+	// L'implémentation doit être transactionnelle.
+	SaveLayout(projectID string, layout []notelayout.Item) error
+}
+
+// NoteGroupRepository persiste les groupes de notes. L'appartenance d'une
+// note à un groupe est portée par la note elle-même (NoteRepository).
+type NoteGroupRepository interface {
+	ListByProject(projectID string) ([]domain.NoteGroup, error)
+	Get(id string) (domain.NoteGroup, error)
+	Create(g domain.NoteGroup) error
+	Rename(id, newName string) error
+	Delete(id string) error
 }
 
 // MeetingRepository persiste les réunions et leurs instances (§2.7).
@@ -101,6 +121,10 @@ type MeetingRepository interface {
 	// SetHidden masque ou réaffiche une réunion (§2.7). Purement visuel : ne
 	// touche ni updated_at, ni le contenu, ni aucun index.
 	SetHidden(id string, hidden bool) error
+
+	// SetColor pose ou retire (chaîne vide) la couleur d'une réunion. Purement
+	// visuel, comme SetHidden ; les instances n'ont pas de couleur.
+	SetColor(id string, color string) error
 
 	// ListInstances rend les instances d'une réunion, la plus récente d'abord (§2.7).
 	ListInstances(meetingID string) ([]domain.MeetingInstance, error)

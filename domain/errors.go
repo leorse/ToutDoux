@@ -25,6 +25,13 @@ var (
 
 	// ErrEmptyName : nom vide ou composé uniquement d'espaces.
 	ErrEmptyName = errors.New("le nom ne peut pas être vide")
+
+	// ErrInvalidLayout : disposition des notes incohérente — note manquante ou
+	// en double, groupe inconnu, ou groupe dont les notes ne sont pas contiguës.
+	ErrInvalidLayout = errors.New("disposition des notes invalide")
+
+	// ErrInvalidColor : couleur hors de la palette des notes et des réunions.
+	ErrInvalidColor = errors.New("couleur invalide")
 )
 
 // ErrModelUnavailable : le modèle sémantique n'est pas déposé, ou n'a pas pu
