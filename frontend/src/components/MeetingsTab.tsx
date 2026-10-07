@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import { teinte } from '../couleurs'
 import { dateInstance } from '../dates'
 import { surLeFond } from '../fond'
 import type { domain } from '../../wailsjs/go/models'
@@ -120,6 +121,14 @@ export function MeetingsTab({
   // d'instance, de réunion ou de projet (§2.7, même fiabilité qu'en §2.6).
   const save = useAutosave(enregistrer, 2000)
 
+  // La couleur porte sur la réunion, pas sur l'instance qu'on édite : les
+  // instances restent neutres (v1.2.0). Seule la couleur revient dans l'état.
+  async function changerCouleur(couleur: string) {
+    if (!meetingId) return
+    const maj = await api.SetMeetingColor(meetingId, couleur)
+    setMeetings((prev) => prev.map((m) => (m.id === maj.id ? ({ ...m, color: maj.color } as domain.Meeting) : m)))
+  }
+
   function choisirReunion(id: string) {
     save.flush()
     setMeetingId(id)
@@ -232,9 +241,15 @@ export function MeetingsTab({
                         ],
                       })
                     }}
+                    aria-current={m.id === meetingId ? 'true' : undefined}
+                    style={{ backgroundColor: teinte(m.color) }}
+                    // Une réunion colorée garde sa couleur une fois ouverte :
+                    // la sélection se lit sur le liseré, pas sur le fond.
                     className={`w-full truncate rounded px-2 py-1 text-left text-sm ${
-                      m.id === meetingId ? 'bg-neutral-200' : 'hover:bg-neutral-100'
-                    } ${m.hidden ? 'italic opacity-50' : ''}`}
+                      teinte(m.color) ? '' : m.id === meetingId ? 'bg-neutral-200' : 'hover:bg-neutral-100'
+                    } ${m.id === meetingId ? 'ring-2 ring-inset ring-[var(--color-selection)]' : ''} ${
+                      m.hidden ? 'italic opacity-50' : ''
+                    }`}
                   >
                     {m.title}
                   </button>
@@ -318,6 +333,8 @@ export function MeetingsTab({
                         save.schedule(html)
                       }}
                       onBlur={save.flush}
+                      color={meetings.find((m) => m.id === meetingId)?.color}
+                      onColorChange={changerCouleur}
                     />
                   </div>
                   <div className="flex items-center gap-3 border-t border-neutral-300 px-3 py-1">

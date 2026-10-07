@@ -10,10 +10,25 @@ function dateLongue(iso: string): string {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
 }
 
+/** Rubriques d'une version, dans l'ordre d'affichage : les ajouts d'abord. */
+const RUBRIQUES = [
+  { type: 'ajout', titre: 'Ajouts' },
+  { type: 'correction', titre: 'Corrections' },
+]
+
+/** Changements d'une nature donnée, les majeurs d'abord, l'ordre du fichier conservé pour le reste. */
+function changements(release: main.Release, type: string): main.Change[] {
+  const lignes = release.changes.filter((c) => c.type === type)
+  return [...lignes.filter((c) => c.level === 'majeur'), ...lignes.filter((c) => c.level !== 'majeur')]
+}
+
 /**
  * Onglet « À propos » des Préférences : la version courante et l'historique des
  * versions, de la plus récente à la plus ancienne. Les données viennent du
  * backend, qui les lit dans wails.json et releases.json.
+ *
+ * Chaque version sépare ses ajouts de ses corrections ; dans chaque rubrique,
+ * les changements majeurs passent devant et portent une étiquette « Majeur ».
  */
 export function AProposView() {
   const [info, setInfo] = useState<main.AppInfo | null>(null)
@@ -69,11 +84,27 @@ export function AProposView() {
               </p>
             ) : null}
 
-            <ul className="mt-2 list-disc pl-5 text-xs text-neutral-700">
-              {release.changes.map((c, i) => (
-                <li key={i}>{formaterTexte(c)}</li>
-              ))}
-            </ul>
+            {RUBRIQUES.map(({ type, titre }) => {
+              const lignes = changements(release, type)
+              if (lignes.length === 0) return null
+              return (
+                <div key={type}>
+                  <h5 className="mt-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">{titre}</h5>
+                  <ul aria-label={titre} className="mt-1 list-disc pl-5 text-xs text-neutral-700">
+                    {lignes.map((c, i) => (
+                      <li key={i} className={c.level === 'majeur' ? 'font-medium text-neutral-900' : undefined}>
+                        {c.level === 'majeur' ? (
+                          <span className="mr-1.5 rounded bg-neutral-800 px-1 py-px text-[10px] font-semibold uppercase text-white">
+                            Majeur
+                          </span>
+                        ) : null}
+                        {formaterTexte(c.text)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            })}
           </article>
         ))}
       </section>

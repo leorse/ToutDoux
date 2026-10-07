@@ -107,3 +107,6 @@ desktop.ini
 # fournisseur la cherche à côté de l'exécutable, puis ici, puis dans le dossier
 # des modèles — d'où le risque qu'une copie traîne à la racine.
 onnxruntime.dll
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

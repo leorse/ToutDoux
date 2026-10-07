@@ -1,4 +1,5 @@
 import type { domain } from '../wailsjs/go/models'
+import { dissolve, groupNotes, toLayout, type Place } from './notesLayout'
 
 /**
  * Backend de démonstration, utilisé quand l'interface tourne hors de Wails :
@@ -71,6 +72,27 @@ const donneesInitiales = () => ({
 let { projects, tasks, notes, meetings, instances } = donneesInitiales()
 
 /**
+ * Groupes de notes (v1.2.0). L'ordre de la liste est celui du tableau `notes` ;
+ * un groupe se trouve là où sont ses notes, contiguës.
+ */
+let noteGroups: domain.NoteGroup[] = []
+
+/**
+ * Applique une disposition aux notes d'un projet, puis écarte les groupes
+ * restés sans note — comme `SaveLayout` côté Go.
+ */
+function appliquerDisposition(projectId: string, layout: Place[]): void {
+  const parId = new Map(notes.map((x) => [x.id, x]))
+  const rangees = layout.map((p) => ({ ...parId.get(p.noteId)!, groupId: p.groupId || undefined }))
+  notes = [...rangees, ...notes.filter((x) => x.projectId !== projectId)] as unknown as domain.Note[]
+  retirerGroupesVides()
+}
+
+function retirerGroupesVides(): void {
+  noteGroups = noteGroups.filter((g) => notes.some((x) => x.groupId === g.id))
+}
+
+/**
  * Index sémantique de démonstration (§2.12).
  *
  * Il conserve l'opt-in strict du vrai backend — rien n'y entre sans appel
@@ -83,6 +105,7 @@ let indexSemantique = new Set<string>()
 /** Restaure le jeu de démonstration. Appelé entre deux tests. */
 export function resetDemoData(): void {
   ;({ projects, tasks, notes, meetings, instances } = donneesInitiales())
+  noteGroups = []
   indexSemantique = new Set<string>()
 }
 
@@ -133,6 +156,7 @@ export const demoBackend = {
     projects = projects.filter((p) => p.id !== id)
     tasks = tasks.filter((x) => x.projectId !== id)
     notes = notes.filter((x) => x.projectId !== id)
+    noteGroups = noteGroups.filter((g) => g.projectId !== id)
     const partants = meetings.filter((m) => m.projectId === id).map((m) => m.id)
     meetings = meetings.filter((m) => m.projectId !== id)
     instances = instances.filter((i) => !partants.includes(i.meetingId))
@@ -152,6 +176,17 @@ export const demoBackend = {
   },
   SetMeetingHidden: async (id: string, hidden: boolean) => {
     meetings = meetings.map((m) => (m.id === id ? { ...m, hidden } : m)) as unknown as domain.Meeting[]
+    return meetings.find((m) => m.id === id)!
+  },
+
+  /* -------- Couleur des notes et des réunions (v1.2.0) -------- */
+
+  SetNoteColor: async (id: string, color: string) => {
+    notes = notes.map((n) => (n.id === id ? { ...n, color } : n)) as unknown as domain.Note[]
+    return notes.find((n) => n.id === id)!
+  },
+  SetMeetingColor: async (id: string, color: string) => {
+    meetings = meetings.map((m) => (m.id === id ? { ...m, color } : m)) as unknown as domain.Meeting[]
     return meetings.find((m) => m.id === id)!
   },
 
@@ -209,7 +244,8 @@ export const demoBackend = {
 
     const due: Record<string, { text: string; urgent: boolean; overdue: boolean }> = {}
     for (const x of duProjet) {
-      if (!x.dueDate) continue
+      // Pas de délai pour une tâche terminée ou annulée (v1.2.0).
+      if (!x.dueDate || x.completed || x.cancelled) continue
       const delta = new Date(x.dueDate).getTime() - Date.now()
       due[x.id] = {
         text: delta < 0 ? 'En retard' : `dans ${Math.round(delta / 60000)} min`,
@@ -448,7 +484,8 @@ export const demoBackend = {
   GetNotes: async (projectId: string) => notes.filter((x) => x.projectId === projectId),
   CreateNote: async (projectId: string, title: string) => {
     const note = n(uid(), projectId, title, '')
-    notes = [...notes, note as unknown as domain.Note]
+    // En tête de liste, hors groupe.
+    notes = [note as unknown as domain.Note, ...notes]
     return note
   },
   UpdateNote: async (noteId: string, title: string, content: string) => {
@@ -457,6 +494,33 @@ export const demoBackend = {
   },
   DeleteNote: async (noteId: string) => {
     notes = notes.filter((x) => x.id !== noteId)
+    retirerGroupesVides()
+  },
+
+  /* -------- Groupes et ordre des notes (v1.2.0) -------- */
+
+  GetNoteGroups: async (projectId: string) => noteGroups.filter((g) => g.projectId === projectId),
+  GroupNotes: async (projectId: string, name: string, noteIds: string[]) => {
+    if (!name.trim()) throw new Error('le nom ne peut pas être vide')
+    const groupe = { id: uid(), projectId, name: name.trim(), createdAt: iso(0) } as unknown as domain.NoteGroup
+    noteGroups = [...noteGroups, groupe]
+    const duProjet = notes.filter((x) => x.projectId === projectId)
+    appliquerDisposition(projectId, groupNotes(toLayout(duProjet), noteIds, groupe.id))
+    return groupe
+  },
+  RenameNoteGroup: async (groupId: string, name: string) => {
+    if (!name.trim()) throw new Error('le nom ne peut pas être vide')
+    noteGroups = noteGroups.map((g) => (g.id === groupId ? { ...g, name: name.trim() } : g)) as unknown as domain.NoteGroup[]
+    return noteGroups.find((g) => g.id === groupId)!
+  },
+  DissolveNoteGroup: async (groupId: string) => {
+    const groupe = noteGroups.find((g) => g.id === groupId)
+    if (!groupe) throw new Error('entité introuvable')
+    const duProjet = notes.filter((x) => x.projectId === groupe.projectId)
+    appliquerDisposition(groupe.projectId, dissolve(toLayout(duProjet), groupId))
+  },
+  SetNotesLayout: async (projectId: string, layout: Place[]) => {
+    appliquerDisposition(projectId, layout)
   },
 
   /* -------- À propos -------- */
@@ -468,9 +532,13 @@ export const demoBackend = {
         version: '1.1.0',
         date: '2026-09-28',
         important: 'Démonstration : ce texte est un exemple d’**information importante**.',
-        changes: ['Le **numéro de version** s’affiche dans la barre de titre', 'Nouvel onglet *À propos*'],
+        changes: [
+          { type: 'ajout', level: 'mineur', text: 'Le **numéro de version** s’affiche dans la barre de titre' },
+          { type: 'ajout', level: 'majeur', text: 'Nouvel onglet *À propos*' },
+          { type: 'correction', level: 'mineur', text: 'Exemple de correction' },
+        ],
       },
-      { version: '1.0.0', date: '2026-08-27', changes: ['Première version'] },
+      { version: '1.0.0', date: '2026-08-27', changes: [{ type: 'ajout', level: 'majeur', text: 'Première version' }] },
     ],
   }),
 

@@ -1,7 +1,8 @@
 import Image from '@tiptap/extension-image'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { COULEURS, teinte } from '../couleurs'
 
 type ViewMode = 'inline' | 'readonly-full' | 'editable-full'
 
@@ -20,13 +21,28 @@ export function RichEditor({
   onChange,
   onBlur,
   readOnly,
+  color,
+  onColorChange,
 }: {
   content: string
   onChange: (html: string) => void
   onBlur?: () => void
   readOnly?: boolean
+  /**
+   * Couleur de ce que l'éditeur édite — une note, ou la réunion dont on édite
+   * le compte rendu (v1.2.0). L'éditeur ne sait pas de quoi il s'agit : il
+   * montre le bouton de couleur si `onColorChange` est fourni, et c'est tout.
+   */
+  color?: string
+  onColorChange?: (color: string) => void
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>('inline')
+  const [paletteOuverte, setPaletteOuverte] = useState(false)
+  const paletteRef = useRef<HTMLSpanElement>(null)
+  // Lu par le gestionnaire d'Échap du plein écran, posé avant celui de la
+  // palette : Échap doit fermer la palette, pas le plein écran derrière elle.
+  const paletteOuverteRef = useRef(false)
+  paletteOuverteRef.current = paletteOuverte
 
   const editor = useEditor({
     extensions: [
@@ -131,12 +147,34 @@ export function RichEditor({
   useEffect(() => {
     if (viewMode === 'inline') return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') fermerPleinEcran()
+      if (event.key === 'Escape' && !paletteOuverteRef.current) fermerPleinEcran()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode])
+
+  // La palette se referme sans rien changer sur Échap ou sur un clic ailleurs.
+  useEffect(() => {
+    if (!paletteOuverte) return
+    const onPointer = (event: MouseEvent) => {
+      if (!paletteRef.current?.contains(event.target as Node)) setPaletteOuverte(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPaletteOuverte(false)
+    }
+    window.addEventListener('mousedown', onPointer, true)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onPointer, true)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [paletteOuverte])
+
+  function choisirCouleur(cle: string) {
+    setPaletteOuverte(false)
+    if (cle !== (color ?? '')) onColorChange?.(cle)
+  }
 
   const barreOutilsVisible = !readOnly && !!editor && viewMode !== 'readonly-full'
   const pleinEcran = viewMode !== 'inline'
@@ -197,6 +235,37 @@ export function RichEditor({
           >
             ⛶
           </button>
+          {onColorChange ? (
+            <span ref={paletteRef} className="relative">
+              <button
+                type="button"
+                title="Couleur"
+                aria-label="Couleur"
+                aria-haspopup="menu"
+                aria-expanded={paletteOuverte}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  setPaletteOuverte((ouverte) => !ouverte)
+                }}
+                style={{ backgroundColor: teinte(color) }}
+                className="min-w-7 rounded border border-neutral-300 px-1.5 py-0.5 text-xs"
+              >
+                🎨
+              </button>
+              {paletteOuverte ? (
+                <div
+                  role="menu"
+                  aria-label="Couleurs"
+                  className="absolute left-0 top-full z-50 mt-1 grid w-max grid-cols-6 gap-1 rounded border border-neutral-300 bg-white p-1.5 shadow-lg"
+                >
+                  {COULEURS.map((c) => (
+                    <Pastille key={c.cle} nom={c.nom} hex={c.hex} choisie={color === c.cle} onChoisir={() => choisirCouleur(c.cle)} />
+                  ))}
+                  <Pastille nom="Aucune couleur" choisie={!teinte(color)} onChoisir={() => choisirCouleur('')} />
+                </div>
+              ) : null}
+            </span>
+          ) : null}
           {pleinEcran ? (
             <button
               type="button"
@@ -242,6 +311,40 @@ function poserLien(editor: NonNullable<ReturnType<typeof useEditor>>) {
   const url = window.prompt('Adresse du lien ?')
   if (!url?.trim()) return
   editor.chain().focus().setLink({ href: url.trim() }).run()
+}
+
+/** Pastille de la palette de couleurs. Sans `hex`, c'est le choix « aucune couleur ». */
+function Pastille({
+  nom,
+  hex,
+  choisie,
+  onChoisir,
+}: {
+  nom: string
+  hex?: string
+  choisie: boolean
+  onChoisir: () => void
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={choisie}
+      aria-label={nom}
+      title={nom}
+      // `onMouseDown`, comme les autres boutons de la barre : l'éditeur garde le focus.
+      onMouseDown={(e) => {
+        e.preventDefault()
+        onChoisir()
+      }}
+      style={{ backgroundColor: hex }}
+      className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] leading-none text-neutral-500 ${
+        choisie ? 'border-2 border-neutral-900' : 'border border-neutral-400'
+      } ${hex ? '' : 'bg-white'}`}
+    >
+      {hex ? null : '∅'}
+    </button>
+  )
 }
 
 /** Bouton de la barre d'outils ; `pressed` vient de l'état de l'éditeur à la sélection courante. */

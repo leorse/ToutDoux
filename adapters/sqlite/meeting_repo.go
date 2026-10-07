@@ -14,7 +14,7 @@ type MeetingRepository struct{ db *DB }
 // NewMeetingRepository câble le repository sur une base ouverte.
 func NewMeetingRepository(db *DB) *MeetingRepository { return &MeetingRepository{db: db} }
 
-const meetingColumns = `id, project_id, title, hidden, created_at, updated_at`
+const meetingColumns = `id, project_id, title, hidden, color, created_at, updated_at`
 const instanceColumns = `id, meeting_id, notes, timestamp, created_at, updated_at`
 
 func scanMeeting(s interface{ Scan(...any) error }) (domain.Meeting, error) {
@@ -22,7 +22,7 @@ func scanMeeting(s interface{ Scan(...any) error }) (domain.Meeting, error) {
 		m                domain.Meeting
 		created, updated string
 	)
-	if err := s.Scan(&m.ID, &m.ProjectID, &m.Title, &m.Hidden, &created, &updated); err != nil {
+	if err := s.Scan(&m.ID, &m.ProjectID, &m.Title, &m.Hidden, &m.Color, &created, &updated); err != nil {
 		return domain.Meeting{}, err
 	}
 	var err error
@@ -93,13 +93,24 @@ func (r *MeetingRepository) Get(id string) (domain.Meeting, error) {
 // Create insère une réunion.
 func (r *MeetingRepository) Create(m domain.Meeting) error {
 	_, err := r.db.Exec(
-		`INSERT INTO meetings (`+meetingColumns+`) VALUES (?, ?, ?, ?, ?, ?)`,
-		m.ID, m.ProjectID, m.Title, m.Hidden, formatTime(m.CreatedAt), formatTime(m.UpdatedAt),
+		`INSERT INTO meetings (`+meetingColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		m.ID, m.ProjectID, m.Title, m.Hidden, m.Color, formatTime(m.CreatedAt), formatTime(m.UpdatedAt),
 	)
 	if err != nil {
 		return fmt.Errorf("création de la réunion : %w", err)
 	}
 	return nil
+}
+
+// SetColor pose ou retire la couleur d'une réunion.
+//
+// N'écrit pas updated_at : ce n'est pas une modification de contenu.
+func (r *MeetingRepository) SetColor(id string, color string) error {
+	res, err := r.db.Exec(`UPDATE meetings SET color = ? WHERE id = ?`, color, id)
+	if err != nil {
+		return fmt.Errorf("couleur de la réunion : %w", err)
+	}
+	return checkAffected(res)
 }
 
 // Rename renomme une réunion.

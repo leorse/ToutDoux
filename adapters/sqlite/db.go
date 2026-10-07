@@ -212,6 +212,42 @@ ALTER TABLE notes    ADD COLUMN hidden BOOLEAN NOT NULL DEFAULT 0;
 ALTER TABLE meetings ADD COLUMN hidden BOOLEAN NOT NULL DEFAULT 0;
 `,
 	},
+	{
+		version: 4,
+		stmts: `
+-- Ordre manuel et groupes de notes (v1.2.0). Un groupe n'a pas de position
+-- propre : ses notes sont contiguës dans l'ordre unique porté par
+-- notes.order_index, et il se trouve là où elles sont.
+CREATE TABLE IF NOT EXISTS note_groups (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    created_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_note_groups_project ON note_groups(project_id);
+
+ALTER TABLE notes ADD COLUMN group_id TEXT;
+ALTER TABLE notes ADD COLUMN order_index INTEGER NOT NULL DEFAULT 0;
+
+-- Les notes existantes gardent l'ordre affiché jusque-là : la plus récemment
+-- modifiée d'abord, l'identifiant départageant les ex æquo.
+UPDATE notes SET order_index = (
+    SELECT COUNT(*) FROM notes n2
+    WHERE n2.project_id = notes.project_id
+      AND (n2.updated_at > notes.updated_at
+           OR (n2.updated_at = notes.updated_at AND n2.id < notes.id))
+);
+`,
+	},
+	{
+		version: 5,
+		stmts: `
+-- Couleur des notes et des réunions (v1.2.0) : une clé de la palette, ou la
+-- chaîne vide pour « aucune ». Purement visuel, comme hidden.
+ALTER TABLE notes    ADD COLUMN color TEXT NOT NULL DEFAULT '';
+ALTER TABLE meetings ADD COLUMN color TEXT NOT NULL DEFAULT '';
+`,
+	},
 }
 
 // migrate applique les migrations non encore jouées.

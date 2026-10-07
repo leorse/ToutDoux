@@ -4,6 +4,7 @@ import {domain} from '../models';
 import {main} from '../models';
 import {model} from '../models';
 import {stats} from '../models';
+import {notelayout} from '../models';
 
 export function AddMeetingInstance(arg1:string):Promise<domain.MeetingInstance>;
 
@@ -27,6 +28,8 @@ export function DeleteProject(arg1:string):Promise<void>;
 
 export function DeleteTask(arg1:string):Promise<void>;
 
+export function DissolveNoteGroup(arg1:string):Promise<void>;
+
 export function GetAllTasks():Promise<Array<domain.Task>>;
 
 export function GetAppInfo():Promise<main.AppInfo>;
@@ -36,6 +39,8 @@ export function GetInstances(arg1:string):Promise<Array<domain.MeetingInstance>>
 export function GetMeetings(arg1:string):Promise<Array<domain.Meeting>>;
 
 export function GetModelStatus():Promise<model.Status>;
+
+export function GetNoteGroups(arg1:string):Promise<Array<domain.NoteGroup>>;
 
 export function GetNotes(arg1:string):Promise<Array<domain.Note>>;
 
@@ -48,6 +53,8 @@ export function GetSidebarStats(arg1:string):Promise<stats.SidebarStats>;
 export function GetTaskView(arg1:string,arg2:main.FilterSelection):Promise<main.TaskView>;
 
 export function GetTasks(arg1:string):Promise<Array<domain.Task>>;
+
+export function GroupNotes(arg1:string,arg2:string,arg3:Array<string>):Promise<domain.NoteGroup>;
 
 export function IsInSemanticIndex(arg1:string):Promise<boolean>;
 
@@ -63,6 +70,8 @@ export function RemoveFromSemanticIndex(arg1:string):Promise<void>;
 
 export function RenameMeeting(arg1:string,arg2:string):Promise<domain.Meeting>;
 
+export function RenameNoteGroup(arg1:string,arg2:string):Promise<domain.NoteGroup>;
+
 export function RenameProject(arg1:string,arg2:string):Promise<domain.Project>;
 
 export function ReparentTask(arg1:string,arg2:string):Promise<Array<domain.Task>>;
@@ -71,9 +80,15 @@ export function SearchGlobal(arg1:string):Promise<Array<main.SearchResult>>;
 
 export function SearchSemantic(arg1:string):Promise<Array<main.SearchResult>>;
 
+export function SetMeetingColor(arg1:string,arg2:string):Promise<domain.Meeting>;
+
 export function SetMeetingHidden(arg1:string,arg2:boolean):Promise<domain.Meeting>;
 
+export function SetNoteColor(arg1:string,arg2:string):Promise<domain.Note>;
+
 export function SetNoteHidden(arg1:string,arg2:boolean):Promise<domain.Note>;
+
+export function SetNotesLayout(arg1:string,arg2:Array<notelayout.Item>):Promise<void>;
 
 export function SetProjectHidden(arg1:string,arg2:boolean):Promise<domain.Project>;
 

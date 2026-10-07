@@ -17,9 +17,13 @@ const INFO = {
       version: '2.3.4',
       date: '2026-09-25',
       important: 'Sauvegardez **avant** de mettre à jour',
-      changes: ['Première modification', 'Une *deuxième* modification', 'Une **troisième** modification'],
+      changes: [
+        { type: 'ajout', level: 'mineur', text: 'Première modification' },
+        { type: 'ajout', level: 'mineur', text: 'Une *deuxième* modification' },
+        { type: 'ajout', level: 'mineur', text: 'Une **troisième** modification' },
+      ],
     },
-    { version: '2.0.0', date: '2026-01-05', changes: ['Ancienne modification'] },
+    { version: '2.0.0', date: '2026-01-05', changes: [{ type: 'correction', level: 'mineur', text: 'Ancienne modification' }] },
   ],
 }
 
@@ -69,13 +73,78 @@ describe('AProposView', () => {
   it('n’interprète pas le HTML d’un texte', async () => {
     setBackend({
       GetAppInfo: async () =>
-        ({ version: '1.0.0', releases: [{ version: '1.0.0', date: '2026-01-01', changes: ['<b>x</b>'] }] }) as never,
+        ({ version: '1.0.0', releases: [{ version: '1.0.0', date: '2026-01-01', changes: [{ type: 'ajout', level: 'mineur', text: '<b>x</b>' }] }] }) as never,
     })
     render(<AProposView />)
 
     const article = await screen.findByRole('article')
     expect(article.querySelector('b')).toBeNull()
     expect(article).toHaveTextContent('<b>x</b>')
+  })
+
+  it('sépare les ajouts des corrections, les ajouts d’abord', async () => {
+    setBackend({
+      GetAppInfo: async () =>
+        ({
+          version: '3.0.0',
+          releases: [
+            {
+              version: '3.0.0',
+              date: '2026-10-07',
+              changes: [
+                { type: 'correction', level: 'mineur', text: 'Un bogue' },
+                { type: 'ajout', level: 'mineur', text: 'Une nouveauté' },
+                { type: 'ajout', level: 'mineur', text: 'Une autre nouveauté' },
+              ],
+            },
+          ],
+        }) as never,
+    })
+    render(<AProposView />)
+
+    const article = await screen.findByRole('article')
+    const rubriques = within(article).getAllByRole('heading', { level: 5 }).map((h) => h.textContent)
+    expect(rubriques).toEqual(['Ajouts', 'Corrections'])
+    expect(within(within(article).getByRole('list', { name: 'Ajouts' })).getAllByRole('listitem')).toHaveLength(2)
+    const corrections = within(within(article).getByRole('list', { name: 'Corrections' })).getAllByRole('listitem')
+    expect(corrections.map((li) => li.textContent)).toEqual(['Un bogue'])
+  })
+
+  it('n’affiche pas de rubrique « Ajouts » pour une version de corrections seules', async () => {
+    setBackend({ GetAppInfo: async () => INFO as never })
+    render(<AProposView />)
+
+    const articles = await screen.findAllByRole('article')
+    expect(within(articles[1]).getByRole('heading', { name: 'Corrections' })).toBeInTheDocument()
+    expect(within(articles[1]).queryByRole('heading', { name: 'Ajouts' })).toBeNull()
+    expect(within(articles[0]).queryByRole('heading', { name: 'Corrections' })).toBeNull()
+  })
+
+  it('place les changements majeurs en premier et les signale comme tels', async () => {
+    setBackend({
+      GetAppInfo: async () =>
+        ({
+          version: '3.0.0',
+          releases: [
+            {
+              version: '3.0.0',
+              date: '2026-10-07',
+              changes: [
+                { type: 'ajout', level: 'mineur', text: 'Petit ajout' },
+                { type: 'ajout', level: 'majeur', text: 'Grand ajout' },
+              ],
+            },
+          ],
+        }) as never,
+    })
+    render(<AProposView />)
+
+    const items = within(await screen.findByRole('list', { name: 'Ajouts' })).getAllByRole('listitem')
+    expect(items[0]).toHaveTextContent('Grand ajout')
+    // L'étiquette est un texte, pas seulement une couleur.
+    expect(within(items[0]).getByText('Majeur')).toBeInTheDocument()
+    expect(items[1]).toHaveTextContent('Petit ajout')
+    expect(within(items[1]).queryByText('Majeur')).toBeNull()
   })
 
   it('signale une information indisponible sans planter', async () => {

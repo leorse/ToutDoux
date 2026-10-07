@@ -120,6 +120,7 @@ func (r *ProjectRepository) Delete(id string) error {
 		{`DELETE FROM meeting_instances WHERE meeting_id IN (SELECT id FROM meetings WHERE project_id = ?)`, []any{id}},
 		{`DELETE FROM meetings WHERE project_id = ?`, []any{id}},
 		{`DELETE FROM notes WHERE project_id = ?`, []any{id}},
+		{`DELETE FROM note_groups WHERE project_id = ?`, []any{id}},
 		{`DELETE FROM tasks WHERE project_id = ?`, []any{id}},
 		{`DELETE FROM images WHERE project_id = ?`, []any{id}},
 		{`DELETE FROM search_index WHERE project_id = ?`, []any{id}},
