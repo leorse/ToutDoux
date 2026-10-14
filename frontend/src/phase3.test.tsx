@@ -103,7 +103,7 @@ describe('Onglet Réunions (§2.7)', () => {
 })
 
 describe('Recherche globale (§2.9)', () => {
-  it('remplace tout le contenu principal, quelle que soit la vue active', async () => {
+  it('s’affiche dans l’onglet Recherche, à la place du contenu principal', async () => {
     const user = userEvent.setup()
     render(<App />)
     await waitFor(() => expect(screen.getByRole('tree', { name: 'Tâches' })).toBeInTheDocument())
@@ -138,27 +138,6 @@ describe('Recherche globale (§2.9)', () => {
     expect(marque!.textContent?.toLowerCase()).toBe('réunion')
   })
 
-  it('Échap ferme la recherche et rend la vue précédente', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await user.type(screen.getByRole('searchbox'), 'réunion')
-    await waitFor(() => expect(screen.getByRole('list', { name: 'Résultats' })).toBeInTheDocument())
-
-    await user.keyboard('{Escape}')
-
-    await waitFor(() => expect(screen.getByRole('tree', { name: 'Tâches' })).toBeInTheDocument())
-    expect(screen.queryByRole('list', { name: 'Résultats' })).not.toBeInTheDocument()
-  })
-
-  it('le bouton Fermer rend aussi la vue précédente', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await user.type(screen.getByRole('searchbox'), 'réunion')
-    await user.click(await screen.findByRole('button', { name: /Fermer/ }))
-
-    await waitFor(() => expect(screen.getByRole('tree', { name: 'Tâches' })).toBeInTheDocument())
-  })
-
   it('double-clic sur un résultat bascule sur la vue Projets', async () => {
     const user = userEvent.setup()
     render(<App />)
@@ -169,5 +148,159 @@ describe('Recherche globale (§2.9)', () => {
 
     await waitFor(() => expect(screen.queryByRole('list', { name: 'Résultats' })).not.toBeInTheDocument())
     expect(screen.getByRole('tab', { name: 'Projets' })).toHaveAttribute('aria-selected', 'true')
+  })
+})
+
+/** Lance une recherche et attend la liste de ses résultats. */
+async function chercher(user: ReturnType<typeof userEvent.setup>, q = 'réunion') {
+  await user.type(screen.getByRole('searchbox'), q)
+  return screen.findByRole('list', { name: 'Résultats' })
+}
+
+/** Ouvre le premier résultat et attend la bascule sur la vue Projets. */
+async function ouvrirPremier(user: ReturnType<typeof userEvent.setup>, resultats: HTMLElement) {
+  await user.dblClick(within(resultats).getAllByRole('button')[0])
+  await waitFor(() => expect(screen.getByRole('tab', { name: 'Projets' })).toHaveAttribute('aria-selected', 'true'))
+}
+
+describe('Onglet Recherche', () => {
+  it('n’existe pas sans recherche', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('tree', { name: 'Tâches' })).toBeInTheDocument())
+    expect(screen.queryByRole('tab', { name: 'Recherche' })).not.toBeInTheDocument()
+  })
+
+  it('apparaît après Priorités et devient la vue active dès la recherche lancée', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await chercher(user)
+
+    const onglets = screen.getAllByRole('tab').map((t) => t.textContent)
+    expect(onglets.slice(0, 3)).toEqual(['Projets', expect.stringMatching(/^Priorités/), 'Recherche'])
+    expect(screen.getByRole('tab', { name: 'Recherche' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('disparaît quand la requête repasse sous trois caractères, et rend la vue d’avant', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole('tab', { name: /Priorités/ }))
+    await chercher(user)
+
+    await user.type(screen.getByRole('searchbox'), '{Backspace}{Backspace}{Backspace}{Backspace}{Backspace}')
+
+    expect(screen.getByRole('searchbox')).toHaveValue('ré')
+    expect(screen.queryByRole('tab', { name: 'Recherche' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Priorités/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('n’a plus de bouton Fermer dans l’en-tête : seulement une croix sur l’onglet', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await chercher(user)
+
+    expect(screen.queryByRole('button', { name: /Fermer ⊗/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fermer la recherche' })).toHaveTextContent(/^✕$/)
+  })
+
+  it('ouvrir une note garde la requête et l’onglet', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await ouvrirPremier(user, await chercher(user, 'repoussée'))
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Notes' })).toHaveAttribute('aria-selected', 'true'))
+    expect(screen.getByRole('searchbox')).toHaveValue('repoussée')
+    expect(screen.getByRole('tab', { name: 'Recherche' })).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('revenir sur l’onglet retrouve le résultat sélectionné', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const resultats = await chercher(user)
+    const boutons = within(resultats).getAllByRole('button')
+    expect(boutons.length).toBeGreaterThan(1)
+    const dernier = boutons[boutons.length - 1]
+    const libelle = dernier.textContent
+
+    await user.dblClick(dernier)
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Projets' })).toHaveAttribute('aria-selected', 'true'))
+
+    await user.click(screen.getByRole('tab', { name: 'Recherche' }))
+    const liste = await screen.findByRole('list', { name: 'Résultats' })
+    const courant = within(liste)
+      .getAllByRole('button')
+      .find((b) => b.getAttribute('aria-current') === 'true')
+    expect(courant?.textContent).toBe(libelle)
+  })
+
+  it('passer sur Priorités garde l’onglet', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await chercher(user)
+    await user.click(screen.getByRole('tab', { name: /Priorités/ }))
+
+    await waitFor(() => expect(screen.getByRole('list', { name: /Tâches Critiques/ })).toBeInTheDocument())
+    expect(screen.getByRole('tab', { name: 'Recherche' })).toBeInTheDocument()
+  })
+
+  it('une nouvelle requête remplace la recherche dans un seul onglet', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await ouvrirPremier(user, await chercher(user))
+
+    await user.clear(screen.getByRole('searchbox'))
+    await user.type(screen.getByRole('searchbox'), 'repoussée')
+
+    expect(screen.getAllByRole('tab', { name: 'Recherche' })).toHaveLength(1)
+    expect(screen.getByRole('tab', { name: 'Recherche' })).toHaveAttribute('aria-selected', 'true')
+    const liste = await screen.findByRole('list', { name: 'Résultats' })
+    await waitFor(() => expect(within(liste).getByText('Compte rendu du 12/08')).toBeInTheDocument())
+  })
+
+  it('la croix de l’onglet ferme la recherche et rend la vue d’avant', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole('tab', { name: /Priorités/ }))
+    await chercher(user)
+
+    await user.click(screen.getByRole('button', { name: 'Fermer la recherche' }))
+
+    expect(screen.queryByRole('tab', { name: 'Recherche' })).not.toBeInTheDocument()
+    expect(screen.getByRole('searchbox')).toHaveValue('')
+    expect(screen.getByRole('tab', { name: /Priorités/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('fermer depuis Projets laisse Projets et la note ouverte', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await ouvrirPremier(user, await chercher(user, 'repoussée'))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Notes' })).toHaveAttribute('aria-selected', 'true'))
+
+    await user.click(screen.getByRole('button', { name: 'Fermer la recherche' }))
+
+    expect(screen.queryByRole('tab', { name: 'Recherche' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Projets' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Notes' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('Échap sur l’onglet Recherche ferme la recherche et rend la vue d’avant', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await chercher(user)
+
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.getByRole('tree', { name: 'Tâches' })).toBeInTheDocument())
+    expect(screen.queryByRole('tab', { name: 'Recherche' })).not.toBeInTheDocument()
+  })
+
+  it('Échap ailleurs ne ferme pas la recherche', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await ouvrirPremier(user, await chercher(user))
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(screen.getByRole('searchbox')).toHaveValue('réunion')
+    expect(screen.getByRole('tab', { name: 'Recherche' })).toBeInTheDocument()
   })
 })
