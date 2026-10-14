@@ -25,13 +25,18 @@ export type CibleOuverture = {
 export function SearchView({
   query,
   semantique = false,
-  onClose,
+  actif = true,
   onOpen,
 }: {
   query: string
   /** Mode sémantique (§2.12), piloté par la bascule 🧠 de la bande transverse. */
   semantique?: boolean
-  onClose: () => void
+  /**
+   * Vrai quand l'onglet Recherche est affiché. La vue reste montée quand on en
+   * sort ; elle relance la requête en y revenant, pour refléter ce qui a pu
+   * être modifié entre-temps, en gardant la sélection si elle existe encore.
+   */
+  actif?: boolean
   onOpen: (cible: CibleOuverture) => void
 }) {
   const [results, setResults] = useState<main.SearchResult[]>([])
@@ -46,6 +51,7 @@ export function SearchView({
   const selected = results.find((r) => r.id === selectedId) ?? null
 
   useEffect(() => {
+    if (!actif) return
     // Anti-rebond : sans lui, chaque frappe déclencherait une requête, et les
     // réponses pourraient revenir dans le désordre (§2.9).
     const timer = setTimeout(() => {
@@ -62,7 +68,7 @@ export function SearchView({
         .catch((err) => setErreur(String(err)))
     }, DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [query, semantique])
+  }, [query, semantique, actif])
 
   // Un index sémantique vide se dit, il ne s'affiche pas comme « aucun
   // résultat » : la nuance est tout sauf cosmétique, elle sépare « rien ne
@@ -102,13 +108,6 @@ export function SearchView({
             🧠 sémantique
           </span>
         ) : null}
-        <button
-          type="button"
-          onClick={onClose}
-          className="ml-auto rounded border border-neutral-300 px-2 py-0.5 text-sm hover:bg-neutral-100"
-        >
-          Fermer ⊗
-        </button>
       </div>
 
       {erreur ? (

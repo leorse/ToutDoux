@@ -1,8 +1,13 @@
 import Image from '@tiptap/extension-image'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
+import { Fragment, type Node as PMNode } from '@tiptap/pm/model'
+import { NodeSelection } from '@tiptap/pm/state'
+import type { EditorView } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useRef, useState } from 'react'
 import { COULEURS, teinte } from '../couleurs'
+import { fragmentToMarkdown } from '../markdown'
+import { ContextMenu, type MenuState } from './ContextMenu'
 
 type ViewMode = 'inline' | 'readonly-full' | 'editable-full'
 
@@ -38,6 +43,11 @@ export function RichEditor({
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>('inline')
   const [paletteOuverte, setPaletteOuverte] = useState(false)
+  const [menu, setMenu] = useState<MenuState>(null)
+  // Confirmation brève du bouton « Copier tout en Markdown ».
+  const [copie, setCopie] = useState(false)
+  const minuteurCopie = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(minuteurCopie.current), [])
   const paletteRef = useRef<HTMLSpanElement>(null)
   // Lu par le gestionnaire d'Échap du plein écran, posé avant celui de la
   // palette : Échap doit fermer la palette, pas le plein écran derrière elle.
@@ -102,6 +112,20 @@ export function RichEditor({
         return html.replace(/<img\b[^>]*>/gi, (balise) =>
           /src\s*=\s*["']data:/i.test(balise) ? balise : '',
         )
+      },
+
+      /**
+       * Forme texte brut du presse-papier : du Markdown (v1.2.1).
+       *
+       * C'est le crochet de ProseMirror pour `text/plain` seul : la forme HTML,
+       * qui sert aux collages mis en forme (autre note, Word), reste la sienne.
+       * Il vaut pour la copie, la coupe et le glisser.
+       */
+      clipboardTextSerializer: (slice) => fragmentToMarkdown(slice.content),
+
+      handleDOMEvents: {
+        copy: (view, event) => copierImageSeule(view, event, false),
+        cut: (view, event) => copierImageSeule(view, event, true),
       },
     },
   })
@@ -171,6 +195,51 @@ export function RichEditor({
     }
   }, [paletteOuverte])
 
+  /**
+   * Copie la sélection par le chemin natif, celui de Ctrl+C : le menu et le
+   * bouton produisent ainsi exactement la même chose, image seule comprise.
+   */
+  function copierSelection() {
+    if (!editor) return
+    editor.view.focus()
+    document.execCommand('copy')
+  }
+
+  /** Copie tout le contenu, puis rend la sélection telle qu'elle était. */
+  function copierTout() {
+    if (!editor) return
+    if (editor.isEmpty) {
+      // Une sélection vide ne déclenche aucune copie : on vide nous-mêmes.
+      navigator.clipboard?.writeText('').catch(() => {})
+    } else {
+      const sauvegarde = editor.state.selection
+      editor.commands.selectAll()
+      copierSelection()
+      // `selectAll` ne touche pas au document : la sélection d'avant reste valide.
+      editor.view.dispatch(editor.state.tr.setSelection(sauvegarde))
+    }
+    setCopie(true)
+    clearTimeout(minuteurCopie.current)
+    minuteurCopie.current = setTimeout(() => setCopie(false), 1500)
+  }
+
+  function ouvrirMenu(event: React.MouseEvent) {
+    if (!editor) return
+    event.preventDefault()
+    setMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          kind: 'action',
+          label: 'Copier en Markdown',
+          disabled: editor.state.selection.empty,
+          onSelect: copierSelection,
+        },
+      ],
+    })
+  }
+
   function choisirCouleur(cle: string) {
     setPaletteOuverte(false)
     if (cle !== (color ?? '')) onColorChange?.(cle)
@@ -205,9 +274,19 @@ export function RichEditor({
           <Outil pressed={!!actifs?.codeBlock} label="Bloc de code" onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
             {'</>'}
           </Outil>
+          {/* Pas un format qu'on active : le bouton n'a pas d'état enfoncé. */}
+          <Outil label="Ligne de séparation" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+            <svg aria-hidden viewBox="0 0 16 16" className="h-3.5 w-3.5">
+              <line x1="1" y1="8" x2="15" y2="8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </Outil>
           <span aria-hidden className="mx-1 h-5 w-px self-center bg-neutral-300" />
           <Outil pressed={!!actifs?.link} label="Lien" onClick={() => poserLien(editor)}>
             🔗
+          </Outil>
+          <span aria-hidden className="mx-1 h-5 w-px self-center bg-neutral-300" />
+          <Outil label="Copier tout en Markdown" onClick={copierTout}>
+            {copie ? <span aria-hidden>✓</span> : <IconeMarkdown />}
           </Outil>
           <span aria-hidden className="mx-1 h-5 w-px self-center bg-neutral-300" />
           <button
@@ -295,10 +374,89 @@ export function RichEditor({
           </button>
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto" onContextMenu={ouvrirMenu}>
         <EditorContent editor={editor} className="h-full" />
       </div>
+      <ContextMenu state={menu} onClose={() => setMenu(null)} />
     </div>
+  )
+}
+
+/**
+ * Copie d'une image sélectionnée seule (v1.2.1) : en plus du Markdown, l'image
+ * elle-même part dans le presse-papier, pour un collage dans Paint, un chat ou
+ * un mail.
+ *
+ * Le Markdown et le HTML sont d'abord posés de façon synchrone, comme le ferait
+ * ProseMirror ; l'écriture asynchrone qui ajoute le PNG vient ensuite les
+ * remplacer. Si elle échoue, le presse-papier garde donc au moins la copie
+ * ordinaire.
+ */
+function copierImageSeule(view: EditorView, event: ClipboardEvent, couper: boolean): boolean {
+  const sel = view.state.selection
+  if (!(sel instanceof NodeSelection) || sel.node.type.name !== 'image') return false
+  const data = event.clipboardData
+  if (!data) return false
+
+  const markdown = fragmentToMarkdown(Fragment.from(sel.node))
+  const html = baliseImage(sel.node)
+  event.preventDefault()
+  data.clearData()
+  data.setData('text/html', html)
+  data.setData('text/plain', markdown)
+
+  if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+    const png = versPng(String(sel.node.attrs.src ?? ''))
+    png.catch(() => {}) // l'échec est traité par celui de l'écriture
+    navigator.clipboard
+      .write([
+        new ClipboardItem({
+          // Une promesse plutôt que le blob : l'écriture part pendant le geste
+          // de l'utilisateur, la conversion se termine après.
+          'image/png': png,
+          'text/plain': new Blob([markdown], { type: 'text/plain' }),
+          'text/html': new Blob([html], { type: 'text/html' }),
+        }),
+      ])
+      .catch(() => {})
+  }
+
+  if (couper && view.editable) view.dispatch(view.state.tr.deleteSelection().scrollIntoView())
+  return true
+}
+
+function baliseImage(node: PMNode): string {
+  const img = document.createElement('img')
+  img.src = String(node.attrs.src ?? '')
+  if (node.attrs.alt) img.alt = String(node.attrs.alt)
+  return img.outerHTML
+}
+
+/** Le presse-papier n'accepte que le PNG : l'image passe par un canevas. */
+function versPng(src: string): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = document.createElement('img')
+    img.onload = () => {
+      const canevas = document.createElement('canvas')
+      canevas.width = img.naturalWidth
+      canevas.height = img.naturalHeight
+      const ctx = canevas.getContext('2d')
+      if (!ctx) return reject(new Error('canevas indisponible'))
+      ctx.drawImage(img, 0, 0)
+      canevas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('conversion PNG impossible'))), 'image/png')
+    }
+    img.onerror = () => reject(new Error('image illisible'))
+    img.src = src
+  })
+}
+
+/** Logo Markdown (« M↓ »), en trait pour suivre la couleur du texte. */
+function IconeMarkdown() {
+  return (
+    <svg aria-hidden viewBox="0 0 208 128" className="h-3.5 w-5">
+      <rect x="5" y="5" width="198" height="118" rx="10" fill="none" stroke="currentColor" strokeWidth="10" />
+      <path d="M30 98V30h20l20 25 20-25h20v68H90V59L70 84 50 59v39zm125 0-30-33h20V30h20v35h20z" fill="currentColor" />
+    </svg>
   )
 }
 
@@ -347,14 +505,18 @@ function Pastille({
   )
 }
 
-/** Bouton de la barre d'outils ; `pressed` vient de l'état de l'éditeur à la sélection courante. */
+/**
+ * Bouton de la barre d'outils ; `pressed` vient de l'état de l'éditeur à la
+ * sélection courante. Sans `pressed`, c'est une action ponctuelle (insérer une
+ * ligne, copier) : le bouton n'annonce alors aucun état enfoncé.
+ */
 function Outil({
   pressed,
   label,
   onClick,
   children,
 }: {
-  pressed: boolean
+  pressed?: boolean
   label: string
   onClick: () => void
   children: React.ReactNode

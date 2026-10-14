@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, onEvent } from './api'
 import type { domain } from '../wailsjs/go/models'
 import { MeetingsTab } from './components/MeetingsTab'
@@ -12,8 +12,16 @@ import { Split } from './components/Split'
 import { FILTRES_PAR_DEFAUT, TasksTab, type Filtres } from './components/TasksTab'
 import { ViewTab } from './components/ViewTab'
 
-/** Vues de premier niveau (§2.11, §2.13). */
-type View = 'projects' | 'priorities' | 'preferences'
+/**
+ * Vues de premier niveau (§2.11, §2.13). `search` n'existe que tant qu'une
+ * recherche est active : c'est l'onglet « Recherche ».
+ */
+type View = 'projects' | 'priorities' | 'preferences' | 'search'
+
+/** Une recherche ne se déclenche qu'au-delà de deux caractères (§2.9). */
+function estRecherche(q: string) {
+  return q.trim().length > 2
+}
 
 /** Sous-onglets de la vue Projets (§2.11). */
 type Tab = 'tasks' | 'notes' | 'meetings'
@@ -136,24 +144,49 @@ export default function App() {
     })
   }, [projetsAffiches])
 
-  const searching = query.trim().length > 2
+  const searching = estRecherche(query)
 
-  // Échap ferme la recherche et revient à la vue précédente (§2.9).
+  // Vue active juste avant le lancement de la recherche : c'est là qu'on
+  // revient quand la recherche se ferme depuis son propre onglet.
+  const vuePrecedente = useRef<View>('projects')
+
+  /**
+   * Change la requête, et avec elle le cycle de vie de l'onglet Recherche.
+   *
+   * Toute nouvelle requête active l'onglet ; une requête qui repasse sous le
+   * seuil le fait disparaître et, s'il était affiché, rend la vue d'avant. Le
+   * cycle de vie est porté ici et non par un effet : seule la saisie (ou la
+   * fermeture) touche à la recherche, jamais la navigation.
+   */
+  const changerRequete = useCallback(
+    (q: string) => {
+      if (estRecherche(q)) {
+        if (!searching) vuePrecedente.current = view
+        setView('search')
+      } else if (searching && view === 'search') {
+        setView(vuePrecedente.current)
+      }
+      setQuery(q)
+    },
+    [searching, view],
+  )
+
+  const fermerRecherche = useCallback(() => changerRequete(''), [changerRequete])
+
+  // Échap ferme la recherche, mais seulement depuis son onglet : ailleurs, un
+  // Échap destiné à un éditeur ou à un menu effacerait la recherche en cours.
+  const echap = useRef<() => void>(() => {})
+  echap.current = () => {
+    if (view === 'search') fermerRecherche()
+  }
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setQuery('')
+      if (event.key === 'Escape') echap.current()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  /**
-   * Navigation vers un élément depuis Priorités ou la Recherche (§2.8, §2.9).
-   *
-   * Ferme la recherche, bascule sur la vue Projets — tout ce que ces deux vues
-   * peuvent ouvrir y vit —, sélectionne le projet et l'onglet natif de
-   * l'élément, puis transmet la cible à l'onglet concerné.
-   */
   /**
    * Active ou désactive le mode sémantique (§2.12).
    *
@@ -172,9 +205,16 @@ export default function App() {
       .catch(() => setModeleAbsent(true))
   }, [semantique])
 
+  /**
+   * Navigation vers un élément depuis Priorités ou la Recherche (§2.8, §2.9).
+   *
+   * Bascule sur la vue Projets — tout ce que ces deux vues peuvent ouvrir y
+   * vit —, sélectionne le projet et l'onglet natif de l'élément, puis transmet
+   * la cible à l'onglet concerné. La recherche n'est pas fermée : son onglet
+   * reste, pour revenir aux résultats.
+   */
   const ouvrir = useCallback(
     (c: CibleOuverture) => {
-      setQuery('')
       setView('projects')
       setSelectedProjectId(c.projectId)
       setTab(c.noteId ? 'notes' : c.meetingId || c.instanceId ? 'meetings' : 'tasks')
@@ -226,7 +266,8 @@ export default function App() {
         view={view}
         onView={setView}
         query={query}
-        onQuery={setQuery}
+        onQuery={changerRequete}
+        onCloseSearch={fermerRecherche}
         searching={searching}
         semantique={semantique}
         onSemantique={basculerSemantique}
@@ -240,14 +281,15 @@ export default function App() {
       ) : null}
 
       <main className="min-h-0 flex-1">
+        {/* La vue de recherche reste montée tant que la recherche vit, même
+            masquée : revenir sur son onglet retrouve la sélection et la
+            largeur des colonnes telles qu'on les a laissées. */}
         {searching ? (
-          <SearchView
-            query={query}
-            semantique={semantique}
-            onClose={() => setQuery('')}
-            onOpen={ouvrir}
-          />
-        ) : view === 'preferences' ? (
+          <div hidden={view !== 'search'} className="h-full">
+            <SearchView query={query} semantique={semantique} actif={view === 'search'} onOpen={ouvrir} />
+          </div>
+        ) : null}
+        {view === 'search' ? null : view === 'preferences' ? (
           <PreferencesView />
         ) : view === 'priorities' ? (
           <PrioritiesView projects={projects} onOpenTask={ouvrirTache} />
@@ -314,6 +356,7 @@ function TransverseBar({
   onView,
   query,
   onQuery,
+  onCloseSearch,
   searching,
   semantique,
   onSemantique,
@@ -323,6 +366,7 @@ function TransverseBar({
   onView: (v: View) => void
   query: string
   onQuery: (q: string) => void
+  onCloseSearch: () => void
   searching: boolean
   semantique: boolean
   onSemantique: () => void
@@ -340,6 +384,17 @@ function TransverseBar({
           active={view === 'priorities'}
           onClick={() => onView('priorities')}
         />
+        {/* L'onglet Recherche n'existe que pendant une recherche ; sa croix
+            remplace l'ancien bouton « Fermer » des résultats. */}
+        {searching ? (
+          <ViewTab
+            label="Recherche"
+            active={view === 'search'}
+            onClick={() => onView('search')}
+            onClose={onCloseSearch}
+            closeLabel="Fermer la recherche"
+          />
+        ) : null}
       </div>
 
       <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
@@ -359,7 +414,7 @@ function TransverseBar({
           {query ? (
             <button
               type="button"
-              onClick={() => onQuery('')}
+              onClick={onCloseSearch}
               aria-label="Effacer la recherche"
               className="absolute right-2 text-neutral-500 hover:text-neutral-900"
             >

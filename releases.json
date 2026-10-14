@@ -1,6 +1,15 @@
 {
   "releases": [
     {
+      "version": "1.2.1",
+      "date": "2026-10-14",
+      "changes": [
+        { "type": "ajout", "level": "mineur", "text": "Les résultats de recherche s'affichent dans un onglet **Recherche**, à côté de *Projets* et *Priorités* : ouvrir un résultat ne vide plus la recherche, on y revient par l'onglet. Il se ferme par sa croix, ou par *Échap* quand il est affiché" },
+        { "type": "ajout", "level": "mineur", "text": "Copier depuis une note ou un compte rendu donne du **Markdown** : listes, titres, gras, liens et images se retrouvent intacts une fois collés dans un éditeur de texte. Au *Ctrl+C*, au clic droit (*Copier en Markdown*) ou d'un bouton qui copie tout ; une image seule se copie aussi comme image" },
+        { "type": "ajout", "level": "mineur", "text": "Un bouton de la barre de l'éditeur insère une **ligne de séparation**, comme le raccourci *---*" }
+      ]
+    },
+    {
       "version": "1.2.0",
       "date": "2026-10-07",
       "changes": [
